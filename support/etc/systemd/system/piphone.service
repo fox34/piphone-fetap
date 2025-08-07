@@ -5,11 +5,11 @@ StartLimitIntervalSec=300
 After=i2s-silence.service
 
 [Service]
-ExecStart=/opt/piphone/piphone.py
-GuessMainPID=no
+ExecStart=/usr/bin/python3 -u /opt/piphone/piphone.py
 Type=simple
+User=root
 Restart=on-failure
-RestartSec=30
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

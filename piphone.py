@@ -7,11 +7,11 @@ from rotarydial import RotaryDial
 import asyncio
 from configparser import ConfigParser
 from datetime import datetime
+from getpass import getuser
 from RPi import GPIO
 from signal import signal, SIGTERM, SIGINT
 from os import system
 import socket
-from subprocess import Popen
 from sys import exit
 from threading import Timer
 from time import sleep
@@ -86,7 +86,6 @@ class PiPhone:
 
     async def check_wifi(self):
         """WLAN-Verbindung periodisch prüfen"""
-
         await asyncio.sleep(2)
         socket.setdefaulttimeout(1)
         while True:
@@ -259,7 +258,7 @@ class PiPhone:
 
 
 async def main():
-    print("Starte piphone...")
+    print(f"Starte piphone als {getuser()}...")
     Audio.play_speaker(config['Sounds']['boot'])
 
     piphone = PiPhone(loop=asyncio.get_running_loop())
