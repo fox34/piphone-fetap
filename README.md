@@ -1,4 +1,4 @@
-# Einrichtung FeTAp611-Tischtelefon
+# FeTAp611-VoIP-Tischtelefon auf Basis eines Raspberry Pi Zero 2 W
 
 Komponenten:
 
@@ -12,6 +12,22 @@ Komponenten:
   hier: Vention = ID 0d8c:0014 C-Media Electronics, Inc. Audio Adapter (Unitek Y-247A)
 - Hörer-Lautsprecher aus altem Headset
 - Hörer-Mikrofon aus altem Headset
+
+# Verkabelung
+
+| Gerät/Funktion | Pin | GPIO | Pi-Pin-Nr. |
+| :--- | :--- | ---: | ---: |
+| **Hörerkontakt** | 1 | 15 | 10 |
+|  | 2 | GND | 9 |
+| **MAX98357** | BCLK | 18 | 12 |
+|  | LRCK | 19 | 35 |
+|  | DIn | 21 | 40 |
+|  | GND | GND | 39 |
+|  | VIn | +5V | 4 |
+| **Nummernschalter** | 1 (nsi1) | GND | 14 |
+|  | 2 (nsi2) | 23 | 16 |
+|  | 3 (nsa1) | GND | 20 |
+|  | 4 (nsa2) | 24 | 18 |
 
 # Linux konfigurieren
 
