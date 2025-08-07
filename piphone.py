@@ -6,12 +6,14 @@ from rotarydial import RotaryDial
 
 import asyncio
 from configparser import ConfigParser
+from datetime import datetime
 from RPi import GPIO
 from signal import signal, SIGTERM, SIGINT
 from os import system
 import socket
 from subprocess import Popen
 from sys import exit
+from threading import Timer
 from time import sleep
 
 config = ConfigParser()
@@ -22,16 +24,16 @@ class PiPhone:
     # Instanzen
     loop: asyncio.AbstractEventLoop
     dial: RotaryDial
-
-    # Tasks und Prozesse
-    wifi_test_task: asyncio.Task
-    earpiece_tone_subprocess: Popen|None = None
-    speaker_tone_subprocess: Popen|None = None
     linphone: Linphone
+
+    # Tasks, Timer und Prozesse
+    wifi_test_task: asyncio.Task
+    dialing_timeout: Timer | None = None
 
     # Zustandsvariablen
     is_connected: bool = False
     call_incoming: bool = False
+    declined_incoming_call: bool = False
     terminate_requested: bool = False
     
     def __init__(self, loop: asyncio.AbstractEventLoop):
@@ -61,6 +63,10 @@ class PiPhone:
         GPIO.setup(config['Pins'].getint('gabel'), GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(config['Pins'].getint('gabel'), GPIO.BOTH, callback = self.watch_hook, bouncetime=100)
 
+        # Falls beim booten direkt der Hörer abgehoben ist: Besetztton spielen
+        if not self.is_hungup():
+            self.cancel_dialing()
+
         # Linphone
         self.linphone = Linphone(
             hostname = config['SIP']['host'],
@@ -71,16 +77,17 @@ class PiPhone:
         )
         self.linphone.start()
 
-    @staticmethod
-    def handle_sigterm(_, __):
+    def handle_sigterm(self, _, __):
         """SIGTERM/SIGINT empfangen und Programm sauber beenden"""
         print("\nSIGTERM/SIGINT empfangen, beende.")
+        if self.dialing_timeout is not None:
+            self.dialing_timeout.cancel()
         raise SystemExit()
 
     async def check_wifi(self):
         """WLAN-Verbindung periodisch prüfen"""
 
-        await asyncio.sleep(5)
+        await asyncio.sleep(2)
         socket.setdefaulttimeout(1)
         while True:
             try:
@@ -92,7 +99,7 @@ class PiPhone:
 
             except TimeoutError:
                 print("WLAN-Verbindung verloren!")
-                Audio.play_loud(config['Sounds']['wlan_nicht_verbunden'])
+                Audio.play_speaker(config['Sounds']['wlan_nicht_verbunden'])
                 self.is_connected = False
                 await asyncio.sleep(10)
 
@@ -102,7 +109,7 @@ class PiPhone:
         return GPIO.input(config['Pins'].getint('gabel'))
 
     def watch_hook(self, _):
-        """Gabelkontakt überwachen"""
+        """Callback/Hook: Gabelkontakt hat ausgelöst"""
 
         if self.is_hungup():
             # Hörer wurde soeben aufgelegt
@@ -110,14 +117,18 @@ class PiPhone:
 
             # Wählvorgang beenden, falls aktiv
             self.dial.end_dialing()
+            if self.dialing_timeout is not None:
+                self.dialing_timeout.cancel()
 
             # Wiedergabe (Freizeichen, Besetzt, usw.) im Hörer stoppen
-            if self.earpiece_tone_subprocess is not None:
-                self.earpiece_tone_subprocess.kill()
+            Audio.stop_earpiece()
 
             # Auflegen
             if self.linphone is not None:
                 self.linphone.hangup()
+
+            # Zustand zurücksetzen
+            self.declined_incoming_call = False
 
         else:
             # Hörer wurde soeben abgehoben
@@ -125,34 +136,38 @@ class PiPhone:
 
             # WLAN nicht verbunden - keine weitere Aktion
             if not self.is_connected:
-                self.earpiece_tone_subprocess = Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
+                Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
                 return
 
             # Eingehender Anruf
             if self.call_incoming:
-                # Wiedergabe im Hörer stoppen (nur zur Sicherheit; hier sollte nichts laufen)
-                if self.earpiece_tone_subprocess is not None:
-                    self.earpiece_tone_subprocess.kill()
-
-                # Klingeln stoppen
-                if self.speaker_tone_subprocess is not None:
-                    self.speaker_tone_subprocess.kill()
+                # Wiedergabe im Hörer (nur zur Sicherheit; hier sollte nichts laufen) und Klingeln stoppen
+                Audio.stop_earpiece()
+                Audio.stop_speaker()
 
                 # Anruf annehmen
                 self.linphone.answer()
 
             else:
                 # Freizeichen im Hörer abspielen
-                self.earpiece_tone_subprocess = Audio.play_earpiece(config['Sounds']['waehlen_frei'])
+                Audio.play_earpiece(config['Sounds']['waehlen_frei'])
 
                 # Nummernschalter überwachen
                 asyncio.run_coroutine_threadsafe(self.dial.start_dialing(), self.loop)
 
-                # TODO Timeout (1 Minute o.ä.)
+                # Timeout
+                self.dialing_timeout = Timer(config['SIP'].getint('dial_timeout'), self.cancel_dialing)
+                self.dialing_timeout.start()
+
+    def cancel_dialing(self):
+        """Timer: Wählvorgang nach einer Minute automatisch abbrechen"""
+        print("Wählvorgang nach Timeout automatisch abgebrochen.")
+        self.dial.end_dialing()
+        Audio.play_earpiece(config['Sounds']['waehlen_besetzt'], repeat=True)
 
     def receive_number(self, number: str):
         """
-        Ziffernfolge von rotarydial empfangen und mit gespeicherten Kurzwahlen/Befehlen abgleichen
+        Callback: Ziffernfolge von rotarydial empfangen -> mit gespeicherten Kurzwahlen/Befehlen abgleichen
         Nummer muss zwingend `str` sein, da sie mit einer 0 beginnen kann.
         """
 
@@ -166,37 +181,37 @@ class PiPhone:
             if len(number) > 5:
                 print("Ziffernfolge zu lang, beende Wahlvorgang.")
                 self.dial.end_dialing()
-                self.earpiece_tone_subprocess.kill()
-                self.earpiece_tone_subprocess = Audio.play_earpiece(config['Sounds']['waehlen_ungueltig'])
+                Audio.play_earpiece(config['Sounds']['waehlen_ungueltig'])
 
             return
 
         print(f"Gewählt: {number} -> {action}")
         self.dial.end_dialing()
-        self.earpiece_tone_subprocess.kill()
+        self.dialing_timeout.cancel()
+        Audio.stop_earpiece()
 
         match action:
             case "test-loudspeaker":
-                Audio.play_loud(config['Sounds']['test_loud']).wait()
+                Audio.play_speaker(config['Sounds']['test_loud']).wait()
                 sleep(1)
-                if not GPIO.input(config['Pins'].getint('gabel')):
+                if not self.is_hungup():
                     # Hörer noch nicht aufgelegt
-                    self.earpiece_tone_subprocess = Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
             case "test-earpiece":
                 Audio.play_earpiece(config['Sounds']['test_earpiece']).wait()
                 sleep(1)
-                if not GPIO.input(config['Pins'].getint('gabel')):
+                if not self.is_hungup():
                     # Hörer noch nicht aufgelegt
-                    self.earpiece_tone_subprocess = Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
             case "reboot":
-                Audio.play_loud(config['Sounds']['reboot']).wait()
+                Audio.play_speaker(config['Sounds']['reboot']).wait()
                 system("systemctl reboot -i")
                 raise SystemExit()
 
             case "shutdown":
-                Audio.play_loud(config['Sounds']['shutdown']).wait()
+                Audio.play_speaker(config['Sounds']['shutdown']).wait()
                 system("systemctl poweroff -i")
                 raise SystemExit()
 
@@ -205,38 +220,47 @@ class PiPhone:
                 self.linphone.call(action)
 
     def incoming_call(self):
-        """Eingehender Anruf"""
+        """Callback: Eingehender Anruf"""
         print("Eingehender Anruf")
 
-        # TODO Klingelsperre zu bestimmten Uhrzeiten
-
-        # Hörer abgehoben -> Anruf abweisen
-        if not self.is_hungup():
+        # Hörer ist abgehoben / Klingelsperre
+        now = datetime.now()
+        if (
+                not self.is_hungup() or                                 # Hörer ist abgehoben
+                (now.hour <= config['SIP'].getint("dnd_to")) or         # Nicht stören: Morgens
+                (0 < config['SIP'].getint("dnd_from") <= now.hour)      # Nicht stören: Abends
+        ):
+            print("Hörer ist abgehoben oder Klingelsperre ist aktiv: weise Anruf ab")
+            self.declined_incoming_call = True  # Nötig für hung_up()
             self.linphone.hangup()
             return
 
         self.call_incoming = True
 
         # Klingelton spielen
-        self.speaker_tone_subprocess = Audio.play_loud(config['Sounds']['ring'], repeat=True)
+        Audio.play_speaker(config['Sounds']['ring'], repeat=True)
 
     def hung_up(self):
-        """Gespräch wurde (durch uns oder Gegenseite) beendet"""
+        """Callback: Gespräch wurde (durch uns oder Gegenseite) beendet"""
         print("Anruf beendet")
         self.call_incoming = False
 
+        # Anruf wurde durch uns abgewiesen, da Hörer bereits abgehoben war - hier nichts weiter tun
+        if self.declined_incoming_call:
+            self.declined_incoming_call = False
+            return
+
         # Klingeln beenden
-        if self.speaker_tone_subprocess is not None:
-            self.speaker_tone_subprocess.kill()
+        Audio.stop_speaker()
 
         # Falls Hörer abgehoben: Besetztton spielen
         if not self.is_hungup():
-            self.earpiece_tone_subprocess = Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+            Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
 
 async def main():
     print("Starte piphone...")
-    Audio.play_loud(config['Sounds']['boot'])
+    Audio.play_speaker(config['Sounds']['boot'])
 
     piphone = PiPhone(loop=asyncio.get_running_loop())
     print("Bereit.")
@@ -248,7 +272,7 @@ async def main():
     except (KeyboardInterrupt, SystemExit):
         GPIO.cleanup()
         piphone.linphone.stop_linphone()
-        Audio.play_loud(config['Sounds']['shutdown']).wait()
+        Audio.play_speaker(config['Sounds']['shutdown']).wait()
         print("piphone beendet.")
         exit(0)
 

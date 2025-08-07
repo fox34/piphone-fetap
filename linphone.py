@@ -50,10 +50,11 @@ class Linphone(Thread):
             ):
                 continue
 
-            #print(f"--- linphone: '{line}'")
+            print(f"--- linphone: '{line}'")
 
             # Eingehender Anruf
             if line.startswith('Receiving new incoming call'):
+                self.call_active = True
                 self.on_incoming_call()
                 continue
 
