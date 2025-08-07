@@ -39,9 +39,9 @@ dtoverlay=max98357a
 
 In `/etc/modprobe.d/raspi-blacklist.conf` folgende Einträge, falls vorhanden, entfernen:
 
-    - `i2c-bcm2708`
-    - `snd-soc-pcm512x`
-    - `snd-soc-wm8804`
+- `i2c-bcm2708`
+- `snd-soc-pcm512x`
+- `snd-soc-wm8804`
 
 In `/etc/modules` den Eintrag `snd_bcm2835`, falls vorhanden, entfernen.
 
@@ -178,7 +178,7 @@ In der Konsole von linphonec:
 
 ```
 soundcard list
-soundcard use 1  # Nummer entsprechend anpassen, nur mit default funktioniert es nicht
+soundcard use 1  # Nummer entsprechend anpassen, nur mit default funktionierte es bei mir nicht
 ```
 
 Testanruf tätigen:
@@ -191,15 +191,7 @@ terminate  # Auflegen
 terminate  # linphonec beenden
 ```
 
-Datei `/root/.linphonerc` anpassen:
-
-```
-[sound]
-# Klingeltöne von linphonec deaktivieren, da diese über den Hörer abgespielt werden würden
-# und wir ohnehin in Python einen eigenen Mechanismus zum Klingeln haben
-remote_ring=
-local_ring=
-```
+Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
 
 ## Optional: SD-Karte read-only mounten
 
