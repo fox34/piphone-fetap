@@ -1,0 +1,12 @@
+# /root/.linphonerc
+
+# Kann auch interaktiv festgelegt werden, die folgenden Einstellungen sind jedoch zwingend erforderlich:
+
+[sound]
+playback_dev_id=ALSA Unknown: USB Audio Device
+ringer_dev_id=ALSA Unknown: USB Audio Device
+capture_dev_id=ALSA Unknown: USB Audio Device
+# Klingeltöne von linphonec deaktivieren, da diese über den Hörer abgespielt werden würden
+# und wir ohnehin in Python einen eigenen Mechanismus zum Klingeln haben
+remote_ring=
+local_ring=

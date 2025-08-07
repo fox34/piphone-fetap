@@ -1,0 +1,15 @@
+[Unit]
+Description=PiPhone
+StartLimitBurst=5
+StartLimitIntervalSec=300
+After=i2s-silence.service
+
+[Service]
+ExecStart=/opt/piphone/piphone.py
+GuessMainPID=no
+Type=simple
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
