@@ -16,6 +16,7 @@ class Linphone(Thread):
     call_active: bool = False
 
     # Regex
+    re_call_establishing: Pattern = compile(r'Establishing call id to')
     re_call_connected: Pattern = compile(r'Call \d+.* connected')
     re_call_terminated: Pattern = compile(r'Call \d+.* ended')
 
@@ -56,7 +57,8 @@ class Linphone(Thread):
                 self.on_incoming_call()
                 continue
 
-            if self.re_call_connected.match(line):
+            # Verbindungsaufbau oder Verbindung hergestellt
+            if self.re_call_establishing.match(line) or self.re_call_connected.match(line):
                 self.call_active = True
                 continue
 
@@ -82,6 +84,7 @@ class Linphone(Thread):
         self.linphone.stdin.flush()
 
     def call(self, number):
+        self.call_active = True
         self._send_cmd(f"call sip:{number}@{self.hostname}")
 
     def hangup(self):
