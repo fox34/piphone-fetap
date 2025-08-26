@@ -17,7 +17,6 @@ class Linphone(Thread):
 
     # Regex
     re_call_incoming: Pattern = compile(r'Receiving new incoming call from .*sip:([*+\d]+)@.*, assigned id \d+')
-    re_call_establishing: Pattern = compile(r'Establishing call id to')
     re_call_connected: Pattern = compile(r'Call \d+.* connected')
     re_call_terminated: Pattern = compile(r'Call \d+.* ended')
 
@@ -41,6 +40,7 @@ class Linphone(Thread):
             return False
 
     def run(self):
+        # Ausgabe (Aktivität) von linphonec parsen
         while self.is_running():
             line = (self.linphone.stdout.readline().decode('utf-8')
                     .removeprefix('linphonec>').strip()
@@ -60,7 +60,7 @@ class Linphone(Thread):
                 continue
 
             # Verbindungsaufbau oder Verbindung hergestellt
-            if self.re_call_establishing.match(line) or self.re_call_connected.match(line):
+            if line.startswith('Establishing call id to') or self.re_call_connected.match(line):
                 self.call_active = True
                 continue
 
