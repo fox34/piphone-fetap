@@ -7,6 +7,11 @@ playback_dev_id=ALSA Unknown: USB Audio Device
 ringer_dev_id=ALSA Unknown: default
 capture_dev_id=ALSA Unknown: USB Audio Device
 
+# Falls nötig
+echocancellation=1
+playback_gain_db=1.000000
+mic_gain_db=1.000000
+
 # Theoretisch auch Klingeltöne von linphonec deaktivieren, da diese über den Hörer abgespielt werden würden
 # und wir ohnehin in Python einen eigenen Mechanismus zum Klingeln haben
 # Allerdings wird diese Einstellung bei jedem Start von linphonec überschrieben.
