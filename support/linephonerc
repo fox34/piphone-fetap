@@ -8,7 +8,10 @@ ringer_dev_id=ALSA Unknown: default
 capture_dev_id=ALSA Unknown: USB Audio Device
 
 # Falls nötig
+# https://wiki.linphone.org/xwiki/wiki/public/view/Lib/Features/Audio%20tuning/#HEnablingandconfiguringsoftwareechocanceller
 echocancellation=1
+
+# https://wiki.linphone.org/xwiki/wiki/public/view/Lib/Features/Audio%20tuning/#HAudiogains
 playback_gain_db=1.000000
 mic_gain_db=1.000000
 
