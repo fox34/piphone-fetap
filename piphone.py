@@ -86,6 +86,7 @@ class PiPhone:
         print("\nSIGTERM/SIGINT empfangen, beende.")
         if self.dialing_timeout is not None:
             self.dialing_timeout.cancel()
+        Audio.play_speaker(config['Sounds']['shutdown']).wait()
         raise SystemExit()
 
     async def check_wifi(self):
