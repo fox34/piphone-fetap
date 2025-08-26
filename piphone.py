@@ -223,9 +223,9 @@ class PiPhone:
                 print(f"Rufe Nummer an: {action}")
                 self.linphone.call(action)
 
-    def incoming_call(self):
+    def incoming_call(self, caller: str):
         """Callback: Eingehender Anruf"""
-        print("Eingehender Anruf")
+        print(f"Eingehender Anruf von {caller}")
 
         # Hörer ist abgehoben / Klingelsperre
         now = datetime.now()
@@ -242,7 +242,10 @@ class PiPhone:
         self.call_incoming = True
 
         # Klingelton spielen
-        Audio.play_speaker(config['Sounds']['ring'], repeat=True)
+        try:
+            Audio.play_speaker(config['Ringtones'][caller], repeat=True)
+        except KeyError:
+            Audio.play_speaker(config['Sounds']['ring'], repeat=True)
 
     def hung_up(self):
         """Callback: Gespräch wurde (durch uns oder Gegenseite) beendet"""

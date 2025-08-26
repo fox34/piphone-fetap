@@ -16,6 +16,7 @@ class Linphone(Thread):
     call_active: bool = False
 
     # Regex
+    re_call_incoming: Pattern = compile(r'Receiving new incoming call from .*sip:([*+\d]+)@.*, assigned id \d+')
     re_call_establishing: Pattern = compile(r'Establishing call id to')
     re_call_connected: Pattern = compile(r'Call \d+.* connected')
     re_call_terminated: Pattern = compile(r'Call \d+.* ended')
@@ -41,21 +42,21 @@ class Linphone(Thread):
 
     def run(self):
         while self.is_running():
-            line = self.linphone.stdout.readline().decode('utf-8').removeprefix('linphonec>').strip()
+            line = (self.linphone.stdout.readline().decode('utf-8')
+                    .removeprefix('linphonec>').strip()
+                    .removeprefix('linphonec>').strip())  # Präfix ist in seltenen Fällen doppelt vorhanden
 
             # Leere Zeilen oder sinnlose, nicht deaktivierbare Warnungen
-            if (
-                    line == '' or
-                    line.startswith("Warning: video is disabled")
-            ):
+            if line == '' or line.startswith("Warning: video is disabled"):
                 continue
 
             #print(f"--- linphone: '{line}'")
 
             # Eingehender Anruf
-            if line.startswith('Receiving new incoming call'):
+            caller = self.re_call_incoming.match(line)
+            if caller:
                 self.call_active = True
-                self.on_incoming_call()
+                self.on_incoming_call(caller[1])
                 continue
 
             # Verbindungsaufbau oder Verbindung hergestellt
