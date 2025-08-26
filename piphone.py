@@ -101,11 +101,11 @@ class PiPhone:
                 self.is_connected = True
                 await asyncio.sleep(60)
 
-            except TimeoutError:
-                print("WLAN-Verbindung verloren!")
+            except (TimeoutError, OSError):
+                print("WLAN-Verbindung nicht hergestellt")
                 Audio.play_speaker(config['Sounds']['wlan_nicht_verbunden'])
                 self.is_connected = False
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
 
     @staticmethod
     def is_hungup() -> bool:
