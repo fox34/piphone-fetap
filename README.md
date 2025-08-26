@@ -217,6 +217,8 @@ Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
 
 ## Optional: SD-Karte read-only mounten
 
+Hinweis: Hat bei mir nicht richtig funktioniert (RAM/Swap zu klein?).
+
 `sudo raspi-config`
 
 - 1 -> S10 (Logging) -> None
