@@ -50,7 +50,7 @@ class Linphone(Thread):
             if line == '' or line.startswith("Warning: video is disabled"):
                 continue
 
-            #print(f"--- linphone: '{line}'")
+            #print(f"<-- linphone: {line}")
 
             # Eingehender Anruf
             caller = self.re_call_incoming.match(line)
@@ -81,7 +81,7 @@ class Linphone(Thread):
             print(f"Kann Befehl '{cmd}' nicht an linphonec senden: Client läuft nicht")
             return
 
-        #print(f"Sende Befehl an linphone: '{cmd}'")
+        #print(f"--> linphone: {cmd}")
         self.linphone.stdin.write(f"{cmd}\n".encode('utf8'))
         self.linphone.stdin.flush()
 
