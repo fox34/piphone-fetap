@@ -266,7 +266,7 @@ async def main():
 
     try:
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
 
     except (KeyboardInterrupt, SystemExit):
         GPIO.cleanup()
