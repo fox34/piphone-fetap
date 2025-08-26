@@ -145,7 +145,7 @@ ctl.i2s {
 
 Siehe auch: https://github.com/volumio/Volumio2/issues/1973
 
-Systemd-Dienst `/etc/systemd/system/i2s-silence.service` anlegen:
+Systemd-Dienst z.B. in `/etc/systemd/system/i2s-silence.service` anlegen:
 
 ```
 [Unit]
@@ -160,6 +160,12 @@ Nice=-20
 
 [Install]
 WantedBy=multi-user.target
+```
+
+Dann aktivieren mit 
+```
+systemctl daemon-reload
+systemctl enable --now i2s-silence.service
 ```
 
 ## Lautstärke festlegen und für einen Neustart speichern
