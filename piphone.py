@@ -44,9 +44,6 @@ class PiPhone:
         # Event-Loop speichern
         self.loop = loop
 
-        # WLAN-Verbindung überwachen
-        asyncio.create_task(self.check_wifi())
-
         # Systemsignale
         signal(SIGTERM, self.handle_sigterm)
         signal(SIGINT, self.handle_sigterm)
@@ -78,8 +75,11 @@ class PiPhone:
             on_hang_up=self.hung_up
         )
         self.linphone.start()
-        print("Bereit.")
 
+        # WLAN-Verbindung überwachen und linphone starten/stoppen
+        asyncio.create_task(self.check_wifi())
+
+        print("Bereit.")
 
     def handle_sigterm(self, _, __):
         """SIGTERM/SIGINT empfangen und Programm sauber beenden"""
@@ -90,21 +90,30 @@ class PiPhone:
 
     async def check_wifi(self):
         """WLAN-Verbindung periodisch prüfen"""
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         socket.setdefaulttimeout(1)
         while True:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     sock.connect((config['Network']['wifi_test_host'], 80))
-                #print("WLAN-Verbindung verfügbar.")
-                self.is_connected = True
+
+                if not self.is_connected:
+                    # Verbindung war zuvor nicht verfügbar (oder es handelt sich um den ersten Startvorgang)
+                    print("WLAN-Verbindung verfügbar.")
+                    self.is_connected = True
+                    self.linphone.start_linphone()
+
                 await asyncio.sleep(60)
 
             except (TimeoutError, OSError):
-                print("WLAN-Verbindung nicht hergestellt")
-                Audio.play_speaker(config['Sounds']['wlan_nicht_verbunden'])
-                self.is_connected = False
-                await asyncio.sleep(5)
+                if self.is_connected:
+                    # Verbindung war zuvor verfügbar
+                    print("WLAN-Verbindung wurde getrennt.")
+                    Audio.play_speaker(config['Sounds']['wlan_nicht_verbunden'])
+                    self.is_connected = False
+                    self.linphone.stop_linphone()
+
+                await asyncio.sleep(1)
 
     @staticmethod
     def is_hungup() -> bool:
@@ -138,7 +147,7 @@ class PiPhone:
             print("Hörer abgehoben")
 
             # WLAN nicht verbunden - keine weitere Aktion
-            if not self.is_connected:
+            if not self.is_connected or not self.linphone.is_running():
                 Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
                 return
 

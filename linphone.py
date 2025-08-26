@@ -8,6 +8,8 @@ class Linphone(Thread):
     linphone: Popen
 
     # Konfiguration
+    _username: str
+    _password: str
     hostname: str
     on_incoming_call: callable
     on_hang_up: callable
@@ -24,14 +26,11 @@ class Linphone(Thread):
         Thread.__init__(self)
 
         # Konfiguration
+        self._username = username
+        self._password = password
         self.hostname = hostname
         self.on_incoming_call = on_incoming_call
         self.on_hang_up = on_hang_up
-
-        # Starte linphonec
-        #print("Starte linphonec")
-        self.linphone = Popen("/usr/bin/linphonec", stdin=PIPE, stdout=PIPE, stderr=DEVNULL)
-        self._send_cmd(f"register sip:{username}@{hostname} {hostname} {password}")
 
     def is_running(self):
         try:
@@ -71,6 +70,17 @@ class Linphone(Thread):
                 continue
 
             #print(f"--- linphone: Ignoriere '{line}'")
+
+    def start_linphone(self):
+        # Starte linphonec
+
+        if self.is_running():
+            print("linphonec läuft bereits.")
+            return
+
+        print("Starte linphonec.")
+        self.linphone = Popen("/usr/bin/linphonec", stdin=PIPE, stdout=PIPE, stderr=DEVNULL)
+        self._send_cmd(f"register sip:{self._username}@{self.hostname} {self.hostname} {self._password}")
 
     def stop_linphone(self):
         if self.is_running():
