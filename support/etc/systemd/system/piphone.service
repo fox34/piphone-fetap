@@ -8,6 +8,7 @@ After=i2s-silence.service
 ExecStart=/usr/bin/python3 -u /opt/piphone/piphone.py
 Type=simple
 User=root
+Nice=-15
 Restart=on-failure
 RestartSec=5
 
