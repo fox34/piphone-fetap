@@ -203,6 +203,7 @@ class PiPhone:
                     Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
             case "test-earpiece":
+                sleep(0.5)
                 Audio.play_earpiece(config['Sounds']['test_earpiece']).wait()
                 sleep(1)
                 if not self.is_hungup():
