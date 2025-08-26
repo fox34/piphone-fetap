@@ -39,7 +39,7 @@ class PiPhone:
     def __init__(self, loop: asyncio.AbstractEventLoop):
         """Haupt-Programm starten"""
         print(f"Starte piphone als {getuser()}...")
-        Audio.play_speaker(config['Sounds']['boot']).wait()
+        Audio.play_speaker(config['Sounds']['boot'])
 
         # Event-Loop speichern
         self.loop = loop
