@@ -38,6 +38,8 @@ class PiPhone:
     
     def __init__(self, loop: asyncio.AbstractEventLoop):
         """Haupt-Programm starten"""
+        print(f"Starte piphone als {getuser()}...")
+        Audio.play_speaker(config['Sounds']['boot']).wait()
 
         # Event-Loop speichern
         self.loop = loop
@@ -76,6 +78,8 @@ class PiPhone:
             on_hang_up=self.hung_up
         )
         self.linphone.start()
+        print("Bereit.")
+
 
     def handle_sigterm(self, _, __):
         """SIGTERM/SIGINT empfangen und Programm sauber beenden"""
@@ -258,12 +262,7 @@ class PiPhone:
 
 
 async def main():
-    print(f"Starte piphone als {getuser()}...")
-    Audio.play_speaker(config['Sounds']['boot'])
-
     piphone = PiPhone(loop=asyncio.get_running_loop())
-    print("Bereit.")
-
     try:
         while True:
             await asyncio.sleep(0.1)
