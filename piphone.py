@@ -4,10 +4,12 @@ from lib.audio import Audio
 from lib.linphone import Linphone
 from lib.rotarydial import RotaryDial
 
+import argparse
 import asyncio
 from configparser import ConfigParser
 from datetime import datetime
 from getpass import getuser
+from pathlib import Path
 from RPi import GPIO
 from signal import signal, SIGTERM, SIGINT
 from os import system
@@ -16,8 +18,30 @@ from sys import exit
 from threading import Timer
 from time import sleep
 
+
+# CLI-Argumente lesen
+argparser = argparse.ArgumentParser(
+    prog='PiPhone',
+    description='Steuerung für Raspberry Pi-basiertes Headless-Telefon im Gehäuse alter Telefone (bspw. FeTAp). '
+                'Koordiniert Hörer, Lautsprecher, Gabelkontakt, Nummernschalter und SIP-Client (linphonec).'
+)
+argparser.add_argument('-c', '--config', type=Path, default=Path("/boot/piphone/config.ini"),
+                       help='Pfad zur Konfigurationsdatei (Standard: %(default)s)')
+argparser.add_argument('--ignore-dnd', action='store_true', help='Nicht stören für Testzwecke deaktivieren')
+argparser.add_argument('-v', '--verbose', action='store_true', help='Ausführliches Logging aktivieren')
+args = argparser.parse_args()
+
+if not args.config.exists():
+    raise Exception(f"Konfigurationsdatei {args.config} nicht gefunden.")
+
+# Konfiguration lesen
 config = ConfigParser()
-config.read("/boot/piphone/config.ini")
+config.read(args.config)
+
+if args.ignore_dnd:
+    config.set('SIP', 'dnd_from', "0")
+    config.set('SIP', 'dnd_to', "0")
+
 
 class PiPhone:
     
@@ -38,7 +62,7 @@ class PiPhone:
     
     def __init__(self, loop: asyncio.AbstractEventLoop):
         """Haupt-Programm starten"""
-        print(f"Starte piphone als {getuser()}...")
+        print(f"Starte PiPhone als {getuser()}...")
         Audio.play_speaker(config['Sounds']['boot'])
 
         # Event-Loop speichern
@@ -64,6 +88,8 @@ class PiPhone:
 
         # Falls beim booten direkt der Hörer abgehoben ist: Besetztton spielen
         if not self.is_hungup():
+            if args.verbose:
+                print("Gabel ist während des Startvorgangs abgehoben, spiele Besetztton.")
             self.cancel_dialing()
 
         # Linphone
@@ -72,7 +98,8 @@ class PiPhone:
             username = config['SIP']['user'],
             password = config['SIP']['pass'],
             on_incoming_call=self.incoming_call,
-            on_hang_up=self.hung_up
+            on_hang_up=self.hung_up,
+            verbose=args.verbose
         )
         self.linphone.start()
 
@@ -240,7 +267,7 @@ class PiPhone:
         now = datetime.now()
         if (
                 not self.is_hungup() or                                 # Hörer ist abgehoben
-                (now.hour <= config['SIP'].getint("dnd_to")) or         # Nicht stören: Morgens
+                (0 < now.hour <= config['SIP'].getint("dnd_to")) or     # Nicht stören: Morgens
                 (0 < config['SIP'].getint("dnd_from") <= now.hour)      # Nicht stören: Abends
         ):
             print("Hörer ist abgehoben oder Klingelsperre ist aktiv: weise Anruf ab")
@@ -284,7 +311,7 @@ async def main():
         GPIO.cleanup()
         piphone.linphone.stop_linphone()
         Audio.play_speaker(config['Sounds']['shutdown']).wait()
-        print("piphone beendet.")
+        print("PiPhone beendet.")
         exit(0)
 
     except Exception as e:

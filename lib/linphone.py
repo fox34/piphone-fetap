@@ -14,6 +14,7 @@ class Linphone(Thread):
     hostname: str
     on_incoming_call: callable
     on_hang_up: callable
+    verbose: bool
 
     # Zustand
     call_active: bool = False
@@ -23,7 +24,7 @@ class Linphone(Thread):
     re_call_connected: Pattern = compile(r'Call \d+.* connected')
     re_call_terminated: Pattern = compile(r'Call \d+.* ended')
 
-    def __init__(self, hostname: str, username: str, password: str, on_incoming_call: callable, on_hang_up: callable):
+    def __init__(self, hostname: str, username: str, password: str, on_incoming_call: callable, on_hang_up: callable, verbose: bool):
         Thread.__init__(self)
 
         # Konfiguration
@@ -32,6 +33,7 @@ class Linphone(Thread):
         self.hostname = hostname
         self.on_incoming_call = on_incoming_call
         self.on_hang_up = on_hang_up
+        self.verbose = verbose
 
     def is_running(self):
         try:
@@ -50,7 +52,8 @@ class Linphone(Thread):
             if line == '' or line.startswith("Warning: video is disabled"):
                 continue
 
-            #print(f"<-- linphone: {line}")
+            if self.verbose:
+                print(f"<-- linphone: {line}")
 
             # Eingehender Anruf
             caller = self.re_call_incoming.match(line)
@@ -70,7 +73,8 @@ class Linphone(Thread):
                 self.on_hang_up()
                 continue
 
-            #print(f"--- linphone: Ignoriere '{line}'")
+            if self.verbose:
+                print(f"--- linphone: Unbekannte Ausgabe, ignoriere: {line}")
 
     def start_linphone(self):
         # Starte linphonec
@@ -92,7 +96,9 @@ class Linphone(Thread):
             print(f"Kann Befehl '{cmd}' nicht an linphonec senden: Client läuft nicht")
             return
 
-        #print(f"--> linphone: {cmd}")
+        if self.verbose:
+            print(f"--> linphone: {cmd}")
+
         self.linphone.stdin.write(f"{cmd}\n".encode('utf8'))
         self.linphone.stdin.flush()
 
