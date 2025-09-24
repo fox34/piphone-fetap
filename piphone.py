@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
-from audio import Audio
-from linphone import Linphone
-from rotarydial import RotaryDial
+from lib.audio import Audio
+from lib.linphone import Linphone
+from lib.rotarydial import RotaryDial
 
 import asyncio
 from configparser import ConfigParser
