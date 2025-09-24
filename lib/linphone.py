@@ -13,6 +13,7 @@ class Linphone(Thread):
     _username: str
     _password: str
     hostname: str
+    on_boot: callable
     on_incoming_call: callable
     on_hang_up: callable
     verbose: bool
@@ -26,13 +27,19 @@ class Linphone(Thread):
     re_call_connected: Pattern = compile(r'Call \d+.* connected')
     re_call_terminated: Pattern = compile(r'Call \d+.* ended')
 
-    def __init__(self, hostname: str, username: str, password: str, on_incoming_call: callable, on_hang_up: callable, verbose: bool):
+    def __init__(
+            self,
+            hostname: str, username: str, password: str,
+            on_boot: callable, on_incoming_call: callable, on_hang_up: callable,
+            verbose: bool
+    ):
         Thread.__init__(self)
 
         # Konfiguration
         self._username = username
         self._password = password
         self.hostname = hostname
+        self.on_boot = on_boot
         self.on_incoming_call = on_incoming_call
         self.on_hang_up = on_hang_up
         self.verbose = verbose
@@ -45,7 +52,7 @@ class Linphone(Thread):
 
     def run(self):
         """Ausgabe (Aktivität) von linphonec parsen"""
-        
+
         while self.is_running():
             line = (self.linphone.stdout.readline().decode('utf-8')
                     .removeprefix('linphonec>').strip()
@@ -103,6 +110,7 @@ class Linphone(Thread):
         if self.verbose:
             print("linphonec gestartet, registriere Account.")
         self._send_cmd(f"register sip:{self._username}@{self.hostname} {self.hostname} {self._password}")
+        self.on_boot()
 
     def stop_linphone(self):
         if self.is_running():

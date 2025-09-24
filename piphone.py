@@ -63,7 +63,6 @@ class PiPhone:
     def __init__(self, loop: asyncio.AbstractEventLoop):
         """Haupt-Programm starten"""
         print(f"Starte PiPhone als {getuser()}...")
-        Audio.play_speaker(config['Sounds']['boot'])
 
         # Event-Loop speichern
         self.loop = loop
@@ -97,9 +96,10 @@ class PiPhone:
             hostname = config['SIP']['host'],
             username = config['SIP']['user'],
             password = config['SIP']['pass'],
-            on_incoming_call=self.incoming_call,
-            on_hang_up=self.hung_up,
-            verbose=args.verbose
+            on_boot = self.linphone_booted,
+            on_incoming_call = self.incoming_call,
+            on_hang_up = self.hung_up,
+            verbose = args.verbose
         )
 
         # WLAN-Verbindung überwachen und linphone starten/stoppen
@@ -257,6 +257,11 @@ class PiPhone:
             case _:
                 print(f"Rufe Nummer an: {action}")
                 self.linphone.call(action)
+
+    @staticmethod
+    def linphone_booted():
+        """Callback: linphonec gestartet"""
+        Audio.play_speaker(config['Sounds']['boot'])
 
     def incoming_call(self, caller: str):
         """Callback: Eingehender Anruf"""
