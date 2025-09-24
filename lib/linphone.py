@@ -85,6 +85,7 @@ class Linphone(Thread):
 
         print("Starte linphonec.")
         self.linphone = Popen("/usr/bin/linphonec", stdin=PIPE, stdout=PIPE, stderr=DEVNULL)
+        self.start()
         self._send_cmd(f"register sip:{self._username}@{self.hostname} {self.hostname} {self._password}")
 
     def stop_linphone(self):

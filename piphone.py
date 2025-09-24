@@ -101,7 +101,6 @@ class PiPhone:
             on_hang_up=self.hung_up,
             verbose=args.verbose
         )
-        self.linphone.start()
 
         # WLAN-Verbindung überwachen und linphone starten/stoppen
         asyncio.create_task(self.check_wifi())
