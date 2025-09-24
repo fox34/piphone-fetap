@@ -1,7 +1,3 @@
-#!/usr/bin/python3
-
-from audio import Audio
-
 from RPi import GPIO
 from time import time_ns, sleep
 from threading import Timer

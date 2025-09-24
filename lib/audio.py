@@ -1,6 +1,7 @@
 from subprocess import Popen, DEVNULL
 from threading import Lock
 
+
 class Audio:
     """
     Tonwiedergabe: Boot-Sound, Klingeln, usw.

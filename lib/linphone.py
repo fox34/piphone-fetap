@@ -2,6 +2,7 @@ from re import compile, Pattern
 from subprocess import Popen, PIPE, DEVNULL
 from threading import Thread
 
+
 class Linphone(Thread):
 
     # Prozesse
