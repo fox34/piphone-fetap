@@ -1,5 +1,6 @@
 from re import compile, Pattern
 from subprocess import Popen, PIPE, DEVNULL
+from time import sleep
 from threading import Thread
 
 
@@ -18,6 +19,7 @@ class Linphone(Thread):
 
     # Zustand
     call_active: bool = False
+    line_received: bool = False
 
     # Regex
     re_call_incoming: Pattern = compile(r'Receiving new incoming call from .*sip:([*+\d]+)@.*, assigned id \d+')
@@ -42,11 +44,15 @@ class Linphone(Thread):
             return False
 
     def run(self):
-        # Ausgabe (Aktivität) von linphonec parsen
+        """Ausgabe (Aktivität) von linphonec parsen"""
+        
         while self.is_running():
             line = (self.linphone.stdout.readline().decode('utf-8')
                     .removeprefix('linphonec>').strip()
                     .removeprefix('linphonec>').strip())  # Präfix ist in seltenen Fällen doppelt vorhanden
+
+            if line != "":
+                self.line_received = True
 
             # Leere Zeilen oder sinnlose, nicht deaktivierbare Warnungen
             if line == '' or line.startswith("Warning: video is disabled"):
@@ -77,7 +83,7 @@ class Linphone(Thread):
                 print(f"--- linphone: Unbekannte Ausgabe, ignoriere: {line}")
 
     def start_linphone(self):
-        # Starte linphonec
+        """Starte linphonec und Thread"""
 
         if self.is_running():
             print("linphonec läuft bereits.")
@@ -86,11 +92,22 @@ class Linphone(Thread):
         print("Starte linphonec.")
         self.linphone = Popen("/usr/bin/linphonec", stdin=PIPE, stdout=PIPE, stderr=DEVNULL)
         self.start()
+
+        counter = 0
+        while self.is_running() and not self.line_received:
+            counter += 1
+            if self.verbose:
+                print(f"Warte auf linphonec... ({counter}00ms)", end='\r')
+            sleep(0.1)
+
+        if self.verbose:
+            print("linphonec gestartet, registriere Account.")
         self._send_cmd(f"register sip:{self._username}@{self.hostname} {self.hostname} {self._password}")
 
     def stop_linphone(self):
         if self.is_running():
             self.linphone.kill()
+        self.line_received = False
 
     def _send_cmd(self, cmd):
         if not self.is_running():
@@ -104,12 +121,15 @@ class Linphone(Thread):
         self.linphone.stdin.flush()
 
     def call(self, number):
+        """Angegebene Nummer anrufen"""
         self.call_active = True
         self._send_cmd(f"call sip:{number}@{self.hostname}")
 
     def hangup(self):
+        """Aktuelles Gespräch beenden"""
         if self.call_active:
             self._send_cmd("terminate")
 
     def answer(self):
+        """Eingehenden Anruf annehmen"""
         self._send_cmd("answer")
