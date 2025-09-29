@@ -44,13 +44,30 @@ class Linphone(Thread):
         self.on_hang_up = on_hang_up
         self.verbose = verbose
 
-    def is_running(self):
+        # Starte linphonec und Thread zur Überwachung der Ausgabe
+        print("Starte linphonec.")
+        self.linphone = Popen("/usr/bin/linphonec", stdin=PIPE, stdout=PIPE, stderr=DEVNULL)
+        self.start()
+
+        counter = 0
+        while self.is_running() and not self.line_received:
+            counter += 1
+            if self.verbose:
+                print(f"Warte auf linphonec... ({counter}00ms)", end='\r')
+            sleep(0.1)
+
+        if self.verbose:
+            print("linphonec gestartet, registriere Account.")
+        self._send_cmd(f"register sip:{self._username}@{self.hostname} {self.hostname} {self._password}")
+        self.on_boot()
+
+    def is_running(self) -> bool:
         try:
             return True if self.linphone.poll() is None else False
         except AttributeError:
             return False
 
-    def run(self):
+    def run(self) -> None:
         """Ausgabe (Aktivität) von linphonec parsen"""
 
         while self.is_running():
@@ -89,35 +106,13 @@ class Linphone(Thread):
             if self.verbose:
                 print(f"--- linphone: Unbekannte Ausgabe, ignoriere: {line}")
 
-    def start_linphone(self):
-        """Starte linphonec und Thread"""
+        print("linphonec wurde beendet!")
 
-        if self.is_running():
-            print("linphonec läuft bereits.")
-            return
+    def terminate(self) -> None:
+        self.linphone.terminate()
+        self.join(0.5)
 
-        print("Starte linphonec.")
-        self.linphone = Popen("/usr/bin/linphonec", stdin=PIPE, stdout=PIPE, stderr=DEVNULL)
-        self.start()
-
-        counter = 0
-        while self.is_running() and not self.line_received:
-            counter += 1
-            if self.verbose:
-                print(f"Warte auf linphonec... ({counter}00ms)", end='\r')
-            sleep(0.1)
-
-        if self.verbose:
-            print("linphonec gestartet, registriere Account.")
-        self._send_cmd(f"register sip:{self._username}@{self.hostname} {self.hostname} {self._password}")
-        self.on_boot()
-
-    def stop_linphone(self):
-        if self.is_running():
-            self.linphone.kill()
-        self.line_received = False
-
-    def _send_cmd(self, cmd):
+    def _send_cmd(self, cmd: str) -> None:
         if not self.is_running():
             print(f"Kann Befehl '{cmd}' nicht an linphonec senden: Client läuft nicht")
             return
@@ -128,16 +123,16 @@ class Linphone(Thread):
         self.linphone.stdin.write(f"{cmd}\n".encode('utf8'))
         self.linphone.stdin.flush()
 
-    def call(self, number):
+    def call(self, number: str) -> None:
         """Angegebene Nummer anrufen"""
         self.call_active = True
         self._send_cmd(f"call sip:{number}@{self.hostname}")
 
-    def hangup(self):
+    def hangup(self) -> None:
         """Aktuelles Gespräch beenden"""
         if self.call_active:
             self._send_cmd("terminate")
 
-    def answer(self):
+    def answer(self) -> None:
         """Eingehenden Anruf annehmen"""
         self._send_cmd("answer")
