@@ -139,16 +139,15 @@ class PiPhone:
                 # linphonec (neu) starten
                 if self.linphone is None:
                     self.start_linphonec()
-                
+
                 # Alle 60s prüfen
                 await asyncio.sleep(60)
 
             except (TimeoutError, OSError):
                 # Verbindung war zuvor verfügbar
                 if self.is_connected:
-                    print("WLAN-Verbindung wurde getrennt.")
-                    Audio.play_speaker(config['Sounds']['wlan_nicht_verbunden'])
                     self.is_connected = False
+                    print("WLAN-Verbindung wurde getrennt.")
 
                     # linphonec beenden
                     if self.linphone is not None:
