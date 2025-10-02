@@ -95,6 +95,11 @@ class PiPhone:
         # WLAN-Verbindung und linphonec überwachen
         asyncio.create_task(self.watchdog())
 
+        # Registrierte Rufnummern loggen
+        print("Registrierte Zielrufnummern:")
+        for (number, action) in config['Numbers'].items():
+            print(f" - {number} -> {action}")
+
         print("Bereit.")
 
     def handle_sigterm(self, _, __) -> None:
