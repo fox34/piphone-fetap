@@ -55,6 +55,7 @@ class PiPhone:
     dialing_timeout: Timer | None = None
 
     # Zustandsvariablen
+    first_boot: bool = True  # Erster Startvorgang: Bootsound abspielen, sobald linphonec gestartet wurde
     is_connected: bool = False
     call_incoming: bool = False
     declined_incoming_call: bool = False
@@ -273,10 +274,11 @@ class PiPhone:
                 print(f"Rufe Nummer an: {action}")
                 self.linphone.call(action)
 
-    @staticmethod
-    def linphone_booted() -> None:
+    def linphone_booted(self) -> None:
         """Callback: linphonec gestartet"""
-        Audio.play_speaker(config['Sounds']['boot'])
+        if self.first_boot:
+            self.first_boot = False
+            Audio.play_speaker(config['Sounds']['boot'])
 
     def incoming_call(self, caller: str) -> None:
         """Callback: Eingehender Anruf"""
