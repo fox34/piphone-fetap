@@ -191,35 +191,41 @@ Funktioniert, ist jedoch veraltet und nicht optimal (bringt ständig Warnungen w
 
 ### Konfigurieren
 
-```
-sudo mkdir -p /root/.local/share/linphone
-sudo linphonec
-```
+    sudo mkdir -p /root/.local/share/linphone
+    sudo linphonec
 
-In der Konsole von linphonec:
+#### Soundkarte auswählen
 
-```
-soundcard list
-soundcard use 1  # Nummer entsprechend anpassen, nur mit default funktionierte es bei mir nicht
-```
+    soundcard list
+    soundcard use 1  # Nummer entsprechend anpassen, nur mit default funktionierte es bei mir nicht
 
-Testanruf tätigen:
 
-```
-register sip:username@hostname hostname password
-call 0123456789
-# [...]
-terminate  # Auflegen
-terminate  # linphonec beenden
-```
+#### Codecs konfigurieren
 
-Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
+Moderne FRITZ!Boxen unterstützen typischerweise [folgende Codecs](https://fritz.com/apps/knowledge-base/FRITZ-Box-4050/1008_Unterstutzte-Sprach-Codecs-bei-Internettelefonie/):
 
-## Optional: SD-Karte read-only mounten
+- G.711a (A-Law)
+- G.711u (µ-Law)
+- G.711 HD
+- G.722
+- G.726-24
+- G.726-32
+- G.726-40
+- iLBC 13.3 (iLBC 30)
+- iLBC 15.2 (iLBC 20)
 
-Hinweis: Hat bei mir nicht richtig funktioniert (RAM/Swap zu klein?).
+Die von `linphonec` unterstützten Codecs können wie folgt aufgelistet und aktiviert werden:
 
-`sudo raspi-config`
+    codecs list
+    codecs enable {index}
+    codecs disable {index}
 
-- 1 -> S10 (Logging) -> None
-- 4 -> P2 (OverlayFS) -> Aktivieren (Boot-Partition beschreibbar lassen, um es wieder deaktivieren zu können)
+#### Testanruf tätigen
+
+    register sip:username@hostname hostname password
+    call 0123456789
+    # [...]
+    terminate  # Auflegen
+    quit  # linphonec beenden
+
+Optional: Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
