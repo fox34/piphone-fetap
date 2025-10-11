@@ -301,6 +301,18 @@ class PiPhone:
             self.linphone.hangup()
             return
 
+        # Whitelist ist aktiv
+        if (
+            config['SIP'].getboolean("whitelist_active") == True
+        ):
+            print("Whitelsit aktiv, prüfe Anrufer.")
+            if self._caller_in_numbers(caller) is False:
+                print("Anrufer nicht in hinterlegten Nummbern: weise Anruf ab")
+                self.declined_incoming_call = True  # Nötig für hung_up()
+                self.linphone.hangup()
+                return
+        
+
         self.call_incoming = True
 
         # Klingelton spielen
@@ -308,6 +320,17 @@ class PiPhone:
             Audio.play_speaker(config['Ringtones'][caller], repeat=True)
         except KeyError:
             Audio.play_speaker(config['Sounds']['ring'], repeat=True)
+
+    def _caller_in_numbers(self, caller: str) -> bool:
+        number_keys = config['Numbers']
+        numbers = []
+        for key in number_keys:
+            numbers.append(number_keys[key])
+
+        if caller in numbers:
+            return True
+        
+        return False
 
     def hung_up(self) -> None:
         """Callback: Gespräch wurde (durch uns oder Gegenseite) beendet"""
