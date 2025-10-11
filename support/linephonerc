@@ -18,5 +18,5 @@ mic_gain_db=1.000000
 # Theoretisch auch Klingeltöne von linphonec deaktivieren, da diese über den Hörer abgespielt werden würden
 # und wir ohnehin in Python einen eigenen Mechanismus zum Klingeln haben
 # Allerdings wird diese Einstellung bei jedem Start von linphonec überschrieben.
-remote_ring=
+remote_ring=/usr/share/sounds/linphone/ringback.wav
 local_ring=
