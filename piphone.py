@@ -53,6 +53,7 @@ class PiPhone:
     # Tasks, Timer und Prozesse
     wifi_test_task: asyncio.Task
     dialing_timeout: Timer | None = None
+    max_call_length_timeout: Timer | None = None
 
     # Zustandsvariablen
     first_boot: bool = True  # Erster Startvorgang: Bootsound abspielen, sobald linphonec gestartet wurde
@@ -107,6 +108,10 @@ class PiPhone:
         print("\nSIGTERM/SIGINT empfangen, beende.")
         if self.dialing_timeout is not None:
             self.dialing_timeout.cancel()
+
+        if self.max_call_length_timeout is not None:
+            self.max_call_length_timeout.cancel()
+
         raise SystemExit()
 
     def start_linphonec(self) -> None:
@@ -188,6 +193,10 @@ class PiPhone:
 
             # Zustand zurücksetzen
             self.declined_incoming_call = False
+
+            # Stoppe max_call_length timer
+            if self.max_call_length_timeout is not None:
+                self.max_call_length_timeout.cancel()
 
         else:
             # Hörer wurde soeben abgehoben
@@ -278,6 +287,15 @@ class PiPhone:
             case _:
                 print(f"Rufe Nummer an: {action}")
                 self.linphone.call(action)
+                
+                # Starte max_call_length timer
+                max_call_length_seconds = config['SIP'].getint('max_call_length', fallback=0) * 60
+                if args.verbose:
+                    print(f"Konfigurierte maximale Anrufdauer {max_call_length_seconds}")
+                if max_call_length_seconds != 0:
+                    self.max_call_length_timeout = Timer(max_call_length_seconds, self._timeout_call)
+                    print(f"Maximale Anrufdauer {max_call_length_seconds} Sekunden")
+                    self.max_call_length_timeout.start()
 
     def linphone_booted(self) -> None:
         """Callback: linphonec gestartet"""
@@ -301,6 +319,18 @@ class PiPhone:
             self.linphone.hangup()
             return
 
+        # Whitelist ist aktiv
+        if (
+            config['SIP'].getboolean("whitelist_active") == True
+        ):
+            print("Whitelsit aktiv, prüfe Anrufer.")
+            if self._caller_in_numbers(caller) is False:
+                print("Anrufer nicht in hinterlegten Nummbern: weise Anruf ab")
+                self.declined_incoming_call = True  # Nötig für hung_up()
+                self.linphone.hangup()
+                return
+        
+
         self.call_incoming = True
 
         # Klingelton spielen
@@ -308,6 +338,21 @@ class PiPhone:
             Audio.play_speaker(config['Ringtones'][caller], repeat=True)
         except KeyError:
             Audio.play_speaker(config['Sounds']['ring'], repeat=True)
+
+    def _caller_in_numbers(self, caller: str) -> bool:
+        number_keys = config['Numbers']
+        numbers = []
+        for key in number_keys:
+            numbers.append(number_keys[key])
+
+        if caller in numbers:
+            return True
+        
+        return False
+
+    def _timeout_call(self) -> None:
+        print("Maximale Telefondauer erreicht. Gespräch wird beendet.")
+        self.linphone.hangup()
 
     def hung_up(self) -> None:
         """Callback: Gespräch wurde (durch uns oder Gegenseite) beendet"""
