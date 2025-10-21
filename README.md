@@ -4,7 +4,8 @@ Komponenten:
 
 - FeTAp 611, nötige Originalkomponenten: Nummernschalter und Gabelkontakt
 - Raspberry Pi Zero 2 W
-- Netzteil: Hi-Link 5V, 3W (600mA)
+- Netzteil: z.B. Hi-Link 5V, 3W (600mA)<br>
+  *Hinweis: 3W/600mA sind eher knapp dimensioniert und setzen eine Drosselung des Pi voraus. Besser sind 5W/1A.*
 - Verstärker für Lautsprecher: MAX98357A (auf fertiger Platine für I2S)
 - Lautsprecher: Visaton FR7, 4 Ohm, 5W Nennleistung
 - USB-OTG-Adapter (Mikro-USB auf USB-A)
