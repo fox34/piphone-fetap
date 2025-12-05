@@ -200,19 +200,6 @@ class PiPhone:
             # Hörer wurde soeben abgehoben
             print("Hörer abgehoben")
 
-            # WLAN nicht verbunden - keine weitere Aktion
-            if not self.is_connected or self.linphone is None or not self.linphone.is_running():
-                Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
-
-                # Nummernschalter - für Reboot - überwachen
-                asyncio.run_coroutine_threadsafe(self.dial.start_dialing(), self.loop)
-
-                # Timeout
-                self.dialing_timeout = Timer(config['SIP'].getint('dial_timeout'), self.cancel_dialing)
-                self.dialing_timeout.start()
-
-                return
-
             # Eingehender Anruf
             if self.call_incoming:
                 # Wiedergabe im Hörer (nur zur Sicherheit; hier sollte nichts laufen) und Klingeln stoppen
@@ -221,17 +208,21 @@ class PiPhone:
 
                 # Anruf annehmen
                 self.linphone.answer()
+                return
 
-            else:
-                # Freizeichen im Hörer abspielen
+            if self.is_connected and self.linphone is not None and self.linphone.is_running():
+                # WLAN verbunden und Linphone verfügbar: Freizeichen im Hörer abspielen
                 Audio.play_earpiece(config['Sounds']['waehlen_frei'])
+            else:
+                # Telefonie nicht verfügbar: Besetztton im Hörer abspielen
+                Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
 
-                # Nummernschalter überwachen
-                asyncio.run_coroutine_threadsafe(self.dial.start_dialing(), self.loop)
+            # Nummernschalter überwachen
+            asyncio.run_coroutine_threadsafe(self.dial.start_dialing(), self.loop)
 
-                # Timeout
-                self.dialing_timeout = Timer(config['SIP'].getint('dial_timeout'), self.cancel_dialing)
-                self.dialing_timeout.start()
+            # Maximale Dauer des Wählvorgangs begrenzen
+            self.dialing_timeout = Timer(config['SIP'].getint('dial_timeout', fallback=60), self.cancel_dialing)
+            self.dialing_timeout.start()
 
     def cancel_dialing(self) -> None:
         """Timer: Wählvorgang nach einer Minute automatisch abbrechen"""
