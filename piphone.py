@@ -320,7 +320,20 @@ class PiPhone:
         # Whitelist ist aktiv
         if config['SIP'].getboolean("whitelist_active"):
             print("Whitelist aktiv, prüfe Anrufer.")
-            if not caller in config['Numbers'].values():
+
+            if caller.startswith('00'):
+                # International format without plus sign: e.g. 0049891234
+                caller_alt_format = f'+{caller.removeprefix('00')}'
+
+            elif caller.startswith('0'):
+                # National format: e.g. 0891234
+                caller_alt_format = f'+49{caller.removeprefix('0')}'
+
+            else:
+                # International format with plus sign: e.g. +49891234
+                caller_alt_format = None
+
+            if not caller in config['Numbers'].values() and (caller_alt_format is None or not caller_alt_format in config['Numbers'].values()):
                 print("Anrufer nicht in hinterlegten Nummbern: weise Anruf ab")
                 self.declined_incoming_call = True  # Nötig für hung_up()
                 self.linphone.hangup()
