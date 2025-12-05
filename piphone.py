@@ -312,6 +312,15 @@ class PiPhone:
             self.linphone.hangup()
             return
 
+        # Whitelist ist aktiv
+        if config['SIP'].getboolean("whitelist_active"):
+            print("Whitelist aktiv, prüfe Anrufer.")
+            if not caller in config['Numbers'].values():
+                print("Anrufer nicht in hinterlegten Nummbern: weise Anruf ab")
+                self.declined_incoming_call = True  # Nötig für hung_up()
+                self.linphone.hangup()
+                return
+
         self.call_incoming = True
 
         # Klingelton spielen
