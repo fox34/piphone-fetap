@@ -322,15 +322,20 @@ class PiPhone:
             print("Whitelist aktiv, prüfe Anrufer.")
 
             if caller.startswith('00'):
-                # International format without plus sign: e.g. 0049891234
+                # International format without plus sign: e.g. 0049891234 => also check for +49891234
                 caller_alt_format = f'+{caller.removeprefix('00')}'
 
             elif caller.startswith('0'):
-                # National format: e.g. 0891234
+                # National format: e.g. 0891234 => also check for +49891234
+                # Note: Country-specific prefix (+49) is currently not configurable
                 caller_alt_format = f'+49{caller.removeprefix('0')}'
 
+            elif caller.startswith('+'):
+                # International format with plus sign: e.g. +49891234 => also check for 0049891234
+                caller_alt_format = f'00{caller.removeprefix('+')}'
+
             else:
-                # International format with plus sign: e.g. +49891234
+                # Unknown => No additional check
                 caller_alt_format = None
 
             if not caller in config['Numbers'].values() and (caller_alt_format is None or not caller_alt_format in config['Numbers'].values()):
