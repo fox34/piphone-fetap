@@ -51,8 +51,9 @@ class PiPhone:
     linphone: Linphone | None = None
 
     # Tasks, Timer und Prozesse
-    wifi_test_task: asyncio.Task
-    dialing_timeout: Timer | None = None
+    wifi_test_task: asyncio.Task  # Periodisch WLAN-Verbindung prüfen
+    dialing_timeout: Timer | None = None  # Wählvorgang nach bestimmter Zeit abbrechen
+    call_duration_timeout: Timer | None = None  # Gesprächsdauer begrenzen
 
     # Zustandsvariablen
     first_boot: bool = True  # Erster Startvorgang: Bootsound abspielen, sobald linphonec gestartet wurde
@@ -107,6 +108,8 @@ class PiPhone:
         print("\nSIGTERM/SIGINT empfangen, beende.")
         if self.dialing_timeout is not None:
             self.dialing_timeout.cancel()
+        if self.call_duration_timeout is not None:
+            self.call_duration_timeout.cancel()
         raise SystemExit()
 
     def start_linphonec(self) -> None:
@@ -188,6 +191,10 @@ class PiPhone:
 
             # Zustand zurücksetzen
             self.declined_incoming_call = False
+
+            # Stoppe Timer für maximale Gesprächsdauer
+            if self.call_duration_timeout is not None:
+                self.call_duration_timeout.cancel()
 
         else:
             # Hörer wurde soeben abgehoben
@@ -290,6 +297,13 @@ class PiPhone:
                     print(f"Rufe Nummer an: {action}")
                     self.linphone.call(action)
 
+                    # Starte Timer für maximale Gesprächsdauer ausgehender Anrufe
+                    call_duration = config['SIP'].getint('max_call_duration', fallback=0)
+                    if call_duration > 0:
+                        self.call_duration_timeout = Timer(call_duration * 60, self._timeout_call)
+                        print(f"Maximale Anrufdauer: {call_duration} Minuten")
+                        self.call_duration_timeout.start()
+
     def linphone_booted(self) -> None:
         """Callback: linphonec gestartet"""
         if self.first_boot:
@@ -328,6 +342,12 @@ class PiPhone:
             Audio.play_speaker(config['Ringtones'][caller], repeat=True)
         except KeyError:
             Audio.play_speaker(config['Sounds']['ring'], repeat=True)
+
+    def _timeout_call(self) -> None:
+        """Timer: Maximale Gesprächsdauer für ausgehende Gespräche erreicht, beende Gespräch"""
+        print("Maximale Telefondauer erreicht. Gespräch wird beendet.")
+        self.linphone.hangup()
+        Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
     def hung_up(self) -> None:
         """Callback: Gespräch wurde (durch uns oder Gegenseite) beendet"""
