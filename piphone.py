@@ -196,6 +196,14 @@ class PiPhone:
             # WLAN nicht verbunden - keine weitere Aktion
             if not self.is_connected or self.linphone is None or not self.linphone.is_running():
                 Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
+
+                # Nummernschalter - für Reboot - überwachen
+                asyncio.run_coroutine_threadsafe(self.dial.start_dialing(), self.loop)
+
+                # Timeout
+                self.dialing_timeout = Timer(config['SIP'].getint('dial_timeout'), self.cancel_dialing)
+                self.dialing_timeout.start()
+
                 return
 
             # Eingehender Anruf
@@ -276,8 +284,11 @@ class PiPhone:
                 raise SystemExit()
 
             case _:
-                print(f"Rufe Nummer an: {action}")
-                self.linphone.call(action)
+                if not self.is_connected or self.linphone is None or not self.linphone.is_running():
+                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+                else:
+                    print(f"Rufe Nummer an: {action}")
+                    self.linphone.call(action)
 
     def linphone_booted(self) -> None:
         """Callback: linphonec gestartet"""
