@@ -16,7 +16,7 @@ from signal import signal, SIGTERM, SIGINT
 from os import system
 import socket
 from sys import exit
-from threading import Timer
+from threading import Timer, Thread
 from time import sleep
 
 
@@ -57,6 +57,7 @@ class PiPhone:
     dialing_timeout: Timer | None = None  # Wählvorgang nach bestimmter Zeit abbrechen
     call_duration_timeout: Timer | None = None  # Gesprächsdauer begrenzen
     night_light_timer: Timer | None = None  # Nachtlicht und Aufwachlicht
+    sleep_music_thread: Thread | None = None  # Schlafmusik
 
     # Zustandsvariablen
     first_boot: bool = True  # Erster Startvorgang: Bootsound abspielen, sobald linphonec gestartet wurde
@@ -278,6 +279,15 @@ class PiPhone:
                     # Hörer noch nicht aufgelegt
                     Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
+            case "play-sleep-music":
+                # Dieser Fall sollte eigentlich nicht eintreten, da mit Abheben des Hörers die Wiedergabe stoppt
+                if self.sleep_music_thread is not None:
+                    print("Schlafmusik läuft bereits.")
+                    return
+
+                self.sleep_music_thread = Thread(target=self.start_sleep_music)
+                self.sleep_music_thread.start()
+
             case "test-loudspeaker":
                 Audio.play_speaker(config['Sounds']['test_loud']).wait()
                 sleep(1)
@@ -316,6 +326,26 @@ class PiPhone:
                         self.call_duration_timeout = Timer(call_duration * 60, self._timeout_call)
                         print(f"Maximale Anrufdauer: {call_duration} Minuten")
                         self.call_duration_timeout.start()
+
+    def start_sleep_music(self) -> None:
+        """Einschlafmusik starten (eigener Thread)"""
+        sleep_music = config['Sounds'].get('sleep_music', fallback=None)
+        if sleep_music is None:
+            print("Kann Einschlafmusik nicht starten: keine Datei angegeben!")
+            return
+
+        print("Spiele Einschlafmusik.")
+        self.manual_dnd = True
+        Audio.play_speaker(sleep_music).wait()
+
+        if args.verbose:
+            print("Einschlafmusik abgespielt.")
+
+        # DND abschalten, falls Nachtlicht nicht aktiv ist
+        if self.night_light_timer is None:
+            self.manual_dnd = False
+
+        self.sleep_music_thread = None
 
     def start_night_mode(self) -> None:
         """Nachtmodus starten: Nachtlicht aktivieren, Aufwachlicht zu den konfigurierten Zeiten"""

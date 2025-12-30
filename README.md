@@ -233,3 +233,7 @@ Optional: Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
 
 Es können über die Konfigurationsoptionen im Bereich `[Misc]` sowohl eine Nachtlicht- als auch eine Aufwachlicht-LED konfiguriert werden.
 Über die Kurzwahl `enable-night-mode` wird dann das Nachtlicht bis zur konfigurierten Uhrzeit aktiviert.
+
+## Schlafmusik
+
+Über die Kurzwahl `start-sleep-music` wird die Spieluhr aktiviert. Die Spieluhr stoppt, sobald der Hörer abgehoben wird.
