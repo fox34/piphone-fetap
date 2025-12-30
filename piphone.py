@@ -1,13 +1,14 @@
 #!/usr/bin/python3
 
 from lib.audio import Audio
+from lib.led import Led
 from lib.linphone import Linphone
 from lib.rotarydial import RotaryDial
 
 import argparse
 import asyncio
 from configparser import ConfigParser
-from datetime import datetime
+from datetime import datetime, timedelta
 from getpass import getuser
 from pathlib import Path
 from RPi import GPIO
@@ -49,11 +50,13 @@ class PiPhone:
     loop: asyncio.AbstractEventLoop
     dial: RotaryDial
     linphone: Linphone | None = None
+    led: Led | None = None
 
     # Tasks, Timer und Prozesse
     wifi_test_task: asyncio.Task  # Periodisch WLAN-Verbindung prüfen
     dialing_timeout: Timer | None = None  # Wählvorgang nach bestimmter Zeit abbrechen
     call_duration_timeout: Timer | None = None  # Gesprächsdauer begrenzen
+    night_light_timer: Timer | None = None  # Nachtlicht und Aufwachlicht
 
     # Zustandsvariablen
     first_boot: bool = True  # Erster Startvorgang: Bootsound abspielen, sobald linphonec gestartet wurde
@@ -61,6 +64,7 @@ class PiPhone:
     call_incoming: bool = False
     declined_incoming_call: bool = False
     terminate_requested: bool = False
+    manual_dnd: bool = False
     
     def __init__(self, loop: asyncio.AbstractEventLoop):
         """Haupt-Programm starten"""
@@ -75,6 +79,16 @@ class PiPhone:
 
         # GPIO einrichten
         GPIO.setmode(GPIO.BCM)
+
+        # Nachtlicht / Aufwachlicht
+        self.led = Led(
+            night_light_pin = config['Misc'].getint('night_light_pin', fallback=0),
+            night_light_duty = config['Misc'].getint('night_light_duty', fallback=100),
+            wake_light_pin = config['Misc'].getint('wake_light_pin', fallback=None),
+            wake_light_duty = config['Misc'].getint('wake_light_duty', fallback=0),
+            verbose = args.verbose
+        )
+        self.led.wake_light_blink()  # Bootvorgang visualisieren
 
         # Nummernschalter
         self.dial = RotaryDial(
@@ -256,6 +270,14 @@ class PiPhone:
         Audio.stop_earpiece()
 
         match action:
+            case "enable-night-mode":
+                self.start_night_mode()
+                Audio.play_speaker(config['Sounds']['action_confirmed']).wait()
+                sleep(1)
+                if not self.is_hungup():
+                    # Hörer noch nicht aufgelegt
+                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+
             case "test-loudspeaker":
                 Audio.play_speaker(config['Sounds']['test_loud']).wait()
                 sleep(1)
@@ -295,22 +317,88 @@ class PiPhone:
                         print(f"Maximale Anrufdauer: {call_duration} Minuten")
                         self.call_duration_timeout.start()
 
+    def start_night_mode(self) -> None:
+        """Nachtmodus starten: Nachtlicht aktivieren, Aufwachlicht zu den konfigurierten Zeiten"""
+
+        if self.led.wake_light_pin is None and self.led.night_light_pin is None:
+            print("Kann Nachtmodus nicht aktivieren: Weder Nachtlicht noch Aufwachlicht sind konfiguriert.")
+            return
+
+        # Aufwachlicht abschalten
+        self.led.wake_light_off()
+
+        # Nachtmodus bereits aktiv: Nachtmodus stattdessen beenden
+        if self.night_light_timer is not None:
+            print("Deaktiviere Nacht-/Aufwachlicht.")
+            self.night_light_timer.cancel()
+            self.night_light_timer = None
+            self.led.night_light_off()
+            self.manual_dnd = False
+            return
+
+        # Nachtlicht einschalten
+        self.manual_dnd = True
+        self.led.night_light_on()
+
+        # Timer für nächsten Morgen aktivieren
+        now = datetime.now()
+        wake_up_times = config['Misc'].get('wake_up_times', fallback='').split(',')
+        if len(wake_up_times) != 7:
+            print("Kann Nachtmodus nicht aktivieren: Wochentage für wake_up_times unvollständig!")
+            return
+
+        # Fall 1: Nach Mitternacht: Aktuellen Wochentag auswählen
+        wake_up_time = datetime.combine(
+            now,
+            datetime.strptime(wake_up_times[now.weekday()], '%H:%M').time()
+        )
+
+        # Fall 2: Vor Mitternacht: Nächsten Wochentag auswählen
+        if now > wake_up_time:
+            tomorrow = now + timedelta(days=1)
+            wake_up_time = datetime.combine(
+                tomorrow,
+                datetime.strptime(wake_up_times[tomorrow.weekday()], '%H:%M').time()
+            )
+
+        print(f"Aktiviere Nachtlicht bis {wake_up_time}.")
+        self.night_light_timer = Timer((wake_up_time - now).seconds, self.start_wakeup_light)
+        self.night_light_timer.start()
+
+    def start_wakeup_light(self) -> None:
+        """Aufwachlicht (zusätzlich zu Nachtlicht) aktivieren"""
+        print("Aktiviere Aufwachlicht für zwei Stunden.")
+        self.led.night_light_on(duty_cycle=100)  # Nachtlicht heller stellen
+        self.led.wake_light_on()
+        self.night_light_timer = Timer(2 * 60 * 60, self.stop_wakeup_light)
+        self.night_light_timer.start()
+
+    def stop_wakeup_light(self) -> None:
+        """Nacht- und Aufwachlicht abschalten"""
+        print("Deaktiviere Aufwachlicht.")
+        self.led.night_light_off()
+        self.led.wake_light_off()
+        self.night_light_timer = None
+        self.manual_dnd = False
+
     def linphone_booted(self) -> None:
         """Callback: linphonec gestartet"""
         if self.first_boot:
             self.first_boot = False
             Audio.play_speaker(config['Sounds']['boot'])
+            self.led.wake_light_off()
 
     def incoming_call(self, caller: str) -> None:
         """Callback: Eingehender Anruf"""
         print(f"Eingehender Anruf von {caller}")
 
-        # Hörer ist abgehoben / Klingelsperre
+        # Anruf in bestimmten Situationen abweisen
         now = datetime.now()
         if (
-                not self.is_hungup() or                                 # Hörer ist abgehoben
-                (0 < now.hour <= config['SIP'].getint("dnd_to")) or     # Nicht stören: Morgens
-                (0 < config['SIP'].getint("dnd_from") <= now.hour)      # Nicht stören: Abends
+            not self.is_hungup() or                                # Hörer ist abgehoben
+            (0 < now.hour <= config['SIP'].getint("dnd_to")) or    # Nicht stören: Morgens
+            (0 < config['SIP'].getint("dnd_from") <= now.hour) or  # Nicht stören: Abends
+            self.manual_dnd                                        # Nicht stören: Manuell (Nachtmodus)
         ):
             print("Hörer ist abgehoben oder Klingelsperre ist aktiv: weise Anruf ab")
             self.declined_incoming_call = True  # Nötig für hung_up()

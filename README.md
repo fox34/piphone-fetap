@@ -182,13 +182,9 @@ sudo alsactl store
 
 Die Dokumentation ist leider äußerst spärlich: https://wiki.linphone.org/xwiki/wiki/public/view/Linphone/
 
-### Vorkompilierte Version
-
 ```
 sudo apt install linphone-cli --no-install-recommends
 ```
-
-Funktioniert, ist jedoch veraltet und nicht optimal (bringt ständig Warnungen wegen irgendwelcher Video-Funktionen)
 
 ### Konfigurieren
 
@@ -230,3 +226,10 @@ Die von `linphonec` unterstützten Codecs können wie folgt aufgelistet und akti
     quit  # linphonec beenden
 
 Optional: Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
+
+# Bonusfunktionen
+
+## Nacht- und Aufwachlicht
+
+Es können über die Konfigurationsoptionen im Bereich `[Misc]` sowohl eine Nachtlicht- als auch eine Aufwachlicht-LED konfiguriert werden.
+Über die Kurzwahl `enable-night-mode` wird dann das Nachtlicht bis zur konfigurierten Uhrzeit aktiviert.
