@@ -33,6 +33,7 @@ argparser.add_argument('-c', '--config', type=Path, default=Path("/boot/piphone/
                        help='Pfad zur Konfigurationsdatei (Standard: %(default)s)')
 argparser.add_argument('--ignore-dnd', action='store_true', help='Nicht stören für Testzwecke deaktivieren')
 argparser.add_argument('--no-web', action='store_true', help='Webserver zur Steuerung nicht starten')
+argparser.add_argument('--silent-boot', action='store_true', help='Keinen Start-Sound abspielen', default=False)
 argparser.add_argument('-v', '--verbose', action='store_true', help='Ausführliches Logging aktivieren')
 args = argparser.parse_args()
 
@@ -533,7 +534,8 @@ class PiPhone:
         """Callback: linphonec gestartet"""
         if self.first_boot:
             self.first_boot = False
-            Audio.play_speaker(config['sounds']['boot'])
+            if not args.silent_boot:
+                Audio.play_speaker(config['sounds']['boot'])
             self.led.wake_light_off()
 
     def incoming_call(self, caller: str) -> None:
