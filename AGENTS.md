@@ -38,3 +38,18 @@ call state) and the state of the features (night light, wake up mode, sleep musi
 It is configured in the `[web]` section of the TOML config file (port 0 = disabled) and can also be disabled
 with `--no-web`. The same actions as the rotary dial short codes can be triggered via
 `POST /api/action/<name>`, the state is available as JSON under `/api/state`.
+
+# Configuration
+
+`lib/config.py` is the single source of truth for the TOML config file. It holds the schema of every
+option (type, default value, description, limits) and provides reading, validation and writing.
+`support/config-example.toml` is a documented sample.
+
+The config file can also be edited in the browser at `/config`, which covers every option. Numbers
+(dial codes and their targets in `[numbers]`) and ringtones are addable and removable tables. The
+schema is rendered dynamically into forms by the JS in `lib/webserver.py`, so adding an option to
+`lib/config.py` makes it appear in the UI automatically.
+
+Changes are never applied to the running process and never trigger a restart; the UI points out
+that a restart is required. Writing the file regenerates all comments from the schema, so comments
+written by hand in the file are not preserved. Values the schema does not know are kept as-is.

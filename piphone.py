@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from lib import config as configlib
 from lib.audio import Audio
 from lib.led import Led
 from lib.linphone import Linphone
@@ -42,24 +43,26 @@ if not args.config.exists():
 
 # Konfiguration lesen
 try:
-    with args.config.open('rb') as config_file:
-        config = tomllib.load(config_file)
+    config = configlib.read(args.config)
 except tomllib.TOMLDecodeError as e:
     raise Exception(f"Konfigurationsdatei {args.config} ist kein gültiges TOML: {e}")
 
 # Standardwerte für fehlende Abschnitte
-config.setdefault('network', {})
-config.setdefault('sip', {})
-config.setdefault('pins', {})
-config.setdefault('numbers', {})
-config.setdefault('ringtones', {})
-config.setdefault('sounds', {})
-config.setdefault('misc', {})
-config.setdefault('web', {})
+for section in configlib.SECTIONS:
+    config.setdefault(section.name, {})
+
+# Normalisierte Fassung der Datei als Vergleichsmaßstab: Nur so lässt sich später
+# zuverlässig erkennen, welche Abschnitte in der Oberfläche wirklich geändert wurden.
+# Der Maßstab entsteht vor --ignore-dnd, damit die Datei dabei unverändert bleibt.
+config_baseline, _ = configlib.validate(config)
 
 if args.ignore_dnd:
     config['sip']['dnd_from'] = 0
     config['sip']['dnd_to'] = 0
+
+# Momentane Datei merken, um spätere Änderungen aus der Oberfläche erkennen zu können
+config_file_mtime = args.config.stat().st_mtime
+config_changed = False
 
 
 class PiPhone:
@@ -146,6 +149,8 @@ class PiPhone:
                 self.webserver = WebServer(
                     port=port,
                     get_state=self.get_state,
+                    get_config=self.get_config,
+                    save_config=self.save_config,
                     actions={
                         'night-mode': self.start_night_mode,
                         'sleep-music': self.toggle_sleep_music,
@@ -395,6 +400,66 @@ class PiPhone:
             (0 < now.hour <= config['sip'].get('dnd_to', 0)) or \
             (0 < config['sip'].get('dnd_from', 0) <= now.hour)
 
+    def get_config(self) -> dict:
+        """
+        Konfiguration und Schema für die Anzeige im Webserver zusammenstellen.
+        Angezeigt wird der Stand der Datei, nicht der des laufenden Betriebs - sonst
+        wären gespeicherte Änderungen sofort wieder aus dem Formular verschwunden.
+        """
+        return {
+            'sections': configlib.describe(config_baseline),
+            'mtime': config_file_mtime,
+            'restart_required': config_changed,
+        }
+
+    def save_config(self, payload: dict) -> dict:
+        """
+        Geänderte Konfiguration aus dem Webserver prüfen und in die Datei schreiben.
+        Der laufende Betrieb übernimmt die Änderungen bewusst nicht - ein Neustart ist nötig.
+        """
+
+        global config_baseline, config_changed, config_file_mtime
+
+        cleaned, errors = configlib.validate(payload, keep=config_baseline)
+        if errors:
+            return {'ok': False, 'errors': errors}
+
+        # Nur tatsächlich geänderte Abschnitte melden
+        changed = [
+            f"[{section.name}]"
+            for section in configlib.SECTIONS
+            if cleaned.get(section.name) != config_baseline.get(section.name)
+        ]
+
+        # Erst in eine temporäre Datei schreiben und dann ersetzen, damit die
+        # Konfiguration bei einem Fehler nicht beschädigt wird
+        temporary = args.config.with_name(args.config.name + '.tmp')
+        try:
+            temporary.write_text(configlib.dump(cleaned), encoding='utf-8')
+
+            # Kontrollieren, ob die erzeugte Datei gültiges TOML ist und alle Werte übernommen wurden
+            reloaded = configlib.read(temporary)
+            if reloaded != cleaned:
+                print("Kontrolle der geschriebenen Konfiguration fehlgeschlagen.")
+                return {'ok': False, 'errors': {'_': 'Kontrolle der geschriebenen Datei fehlgeschlagen.'}}
+
+            temporary.replace(args.config)
+        except OSError as e:
+            print(f"Konfiguration konnte nicht gespeichert werden: {e}")
+            return {'ok': False, 'errors': {'_': f'Datei nicht schreibbar: {e}'}}
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+
+        print(f"Konfiguration gespeichert: {', '.join(changed) if changed else 'keine Änderungen'}")
+
+        config_baseline = cleaned
+        config_file_mtime = args.config.stat().st_mtime
+        config_changed = True
+
+        # Ohne echte Änderung ist kein Neustart nötig
+        return {'ok': True, 'changed': changed, 'restart_required': bool(changed)}
+
     def get_state(self) -> dict:
         """Aktuellen Status für die Anzeige im Webserver zusammenstellen"""
         return {
@@ -408,6 +473,7 @@ class PiPhone:
             'sleep_music': self.sleep_music_thread is not None,
             'dnd': self.is_dnd_active(),
             'next_wake_up': self.next_wake_up.isoformat(timespec='minutes') if self.next_wake_up else None,
+            'config_changed': config_changed,
         }
 
     def start_sleep_music(self) -> None:

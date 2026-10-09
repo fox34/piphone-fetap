@@ -2,3 +2,5 @@
 __pycache__/
 config.toml
 sounds/sleep-*
+node_modules/
+tests/webpage-config.json

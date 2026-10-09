@@ -1,4 +1,8 @@
 # Diese Datei muss nach /boot/piphone/config.toml, um auch in einem RO-Dateisystem angepasst werden zu können
+#
+# Die Datei lässt sich auch im Webinterface des Telefons bearbeiten (/config). Beim Speichern
+# wird sie aus dem Schema in lib/config.py neu geschrieben: Die Kommentare entstehen dabei neu,
+# eigene Kommentare werden nicht beibehalten.
 
 [network]
 wifi_test_host = "10.0.0.1"

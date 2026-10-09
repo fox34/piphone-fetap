@@ -256,8 +256,8 @@ Optional: Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
 ## Webserver
 
 Über den Bereich `[web]` der Konfigurationsdatei kann ein Webserver aktiviert werden, mit dem sich
-der Status des Telefons abrufen und die wichtigsten Funktionen auslösen lassen.
-Ohne Abhängigkeiten, die Seite wird automatisch alle zwei Sekunden aktualisiert.
+der Status des Telefons abrufen, die Konfiguration bearbeiten und die wichtigsten Funktionen auslösen lassen.
+Ohne Abhängigkeiten, die Statusseite wird automatisch alle zwei Sekunden aktualisiert.
 
 ```toml
 [web]
@@ -268,6 +268,8 @@ pass = ""
 
 Anschließend ist das Telefon im WLAN unter `http://<IP-Adresse-des-Pi>` erreichbar.
 
+### Statusseite (`/`)
+
 Angezeigt werden die Laufzeit, der Verbindungs- und Gesprächsstatus sowie der Zustand von
 Nachtlicht, Aufwachmodus, Einschlafmusik, Klingelsperre und der nächsten Aufstehzeit.
 Per Schaltflächen lassen sich Nachtmodus und Einschlafmusik ein- und ausschalten,
@@ -275,8 +277,70 @@ Lautsprecher und Hörer testen sowie das Telefon neu starten oder herunterfahren
 
 > **Achtung:** Der Webserver ist unverschlüsselt und erlaubt das Herunterfahren des Telefons.
 > Im WLAN daher möglichst durch eine Zugangskontrolle (Firewall, separates VLAN) schützen.
+> Für die Konfigurationsseite gilt das erst recht.
 
 Alternativ lässt sich der Webserver auch per `--no-web` deaktivieren.
+
+### Konfigurationsseite (`/config`)
+
+Auf `/config` lässt sich die komplette TOML-Datei über Formulare bearbeiten - alle Abschnitte
+und Optionen der Konfigurationsdatei. Dazu gehören:
+
+- alle festen Optionen aus `[network]`, `[sip]`, `[pins]`, `[sounds]`, `[misc]` und `[web]`,
+  jeweils mit Beschreibung und, wo sinnvoll, mit Grenzwerten (Pflichtfelder, GPIOPins 0-27,
+  Stunden 0-23, Helligkeit 0-100, Port 0-65535)
+- `[numbers]`: Kurzwahlen und Kurzbefehle als Tabelle, Zeilen lassen sich hinzufügen und entfernen,
+  die gültigen Kurzbefehle werden als Vorschläge angeboten
+- `[ringtones]`: rufnummerspezifische Klingeltöne, ebenfalls hinzufüg- und entfernbar
+- Listen wie `sleep_music` und `wake_up_times`: ein Eintrag je Zeile
+
+Eingaben werden vor dem Speichern geprüft, Fehler erscheinen direkt am betroffenen Feld.
+Getestet wird die geschriebene Datei anschließend noch einmal - nur wenn sie gültiges TOML mit
+den erwarteten Werten ist, ersetzt sie die alte Datei.
+
+> **Neustart erforderlich:** Änderungen wirken erst nach einem Neustart des Telefons, da GPIO-Pins,
+> SIP-Zugangsdaten und der Webserver nur beim Start eingerichtet werden. Das Telefon startet sich
+> deshalb **nicht** von selbst neu. Die Oberfläche weist nach dem Speichern darauf hin, auf der
+> Statusseite steht "Konfiguration: Geändert, Neustart nötig", und `/config` bietet eine
+> Neustart-Schaltfläche an.
+
+#### Kommentare in der Konfigurationsdatei
+
+Beim Speichern wird die Datei aus dem Schema in `lib/config.py` neu geschrieben. Jede Option
+erhält dabei wieder ihren erklärenden Kommentar, damit die Datei weiterhin gut lesbar bleibt.
+
+Eigene Kommentare werden dabei **nicht beibehalten**: Sie gehen beim Speichern verloren.
+Wer Kommentare dauerhaft behalten möchte, sollte sie nach dem Speichern erneut einfügen oder
+die Kommentare in `lib/config.py` ergänzen. Werte unbekannter Optionen und Abschnitte, die das
+Schema nicht kennt, bleiben dagegen erhalten.
+
+#### Schnittstellen
+
+| Aufruf | Zweck |
+| :--- | :--- |
+| `GET /api/state` | Status als JSON |
+| `GET /api/config` | Schema und aktuelle Werte als JSON |
+| `POST /api/config` | Konfiguration als JSON speichern, antwortet mit `{"ok":true,"changed":[...]}` oder `{"ok":false,"errors":{...}}` |
+| `POST /api/action/<name>` | Aktion auslösen |
+
+## Tests
+
+Die Tests für Konfiguration und Weboberfläche laufen ohne Hardware und ohne RPi.GPIO:
+
+```
+python3 tests/test-config.py        # Schema, Prüfung, Schreiben der TOML-Datei
+python3 tests/test-webserver.py     # HTTP-Schnittstelle
+python3 tests/test-config-web.py    # Bearbeiten der Konfiguration über HTTP
+```
+
+Der Test der Oberfläche benötigt zusätzlich Node.js und `jsdom`:
+
+```
+npm install jsdom
+node tests/test-webpage.js
+```
+
+Die beiden Hardware-Tests `test-waehlscheibe.py` und `test-connections.py` laufen nur am Telefon.
 
 ## Nacht- und Aufwachlicht
 
