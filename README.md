@@ -40,6 +40,30 @@ sudo apt install git sox libsox-fmt-mp3 --no-install-recommends
 sudo apt autoremove
 ```
 
+## Konfigurationsdatei
+
+Die Konfiguration sollte als TOML-Datei bspw. unter `/boot/piphone/config.toml` abgelegt werden, damit sie auch in einem
+schreibgeschützten Root-Dateisystem (bspw. OverlayFS) angepasst werden kann. Eine vollständig kommentierte Vorlage
+gibt es in `support/config-example.toml`.
+
+```
+sudo mkdir -p /boot/piphone
+sudo cp support/config-example.toml /boot/piphone/config.toml
+sudo nano /boot/piphone/config.toml
+```
+
+Ein anderer Pfad kann über `-c/--config` angegeben werden.
+
+### Umstellung von INI auf TOML
+
+Ältere Versionen hatten noch eine INI-Konfiguration. Einmalig konvertieren:
+
+```
+sudo python3 support/convert-config.py /boot/piphone/config.ini /boot/piphone/config.toml
+```
+
+Die Kommentare der INI-Datei gehen dabei verloren, nur die Werte werden übernommen.
+
 ## MAX98357A aktivieren
 
 Siehe
@@ -231,15 +255,15 @@ Optional: Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
 
 ## Webserver
 
-Über den Bereich `[Web]` der Konfigurationsdatei kann ein Webserver aktiviert werden, mit dem sich
+Über den Bereich `[web]` der Konfigurationsdatei kann ein Webserver aktiviert werden, mit dem sich
 der Status des Telefons abrufen und die wichtigsten Funktionen auslösen lassen.
 Ohne Abhängigkeiten, die Seite wird automatisch alle zwei Sekunden aktualisiert.
 
-```
-[Web]
+```toml
+[web]
 port = 80           # 0 = deaktiviert
-user =              # optionaler Zugangsschutz (HTTP Basic Auth)
-pass =
+user = ""           # optionaler Zugangsschutz (HTTP Basic Auth)
+pass = ""
 ```
 
 Anschließend ist das Telefon im WLAN unter `http://<IP-Adresse-des-Pi>` erreichbar.
@@ -256,7 +280,7 @@ Alternativ lässt sich der Webserver auch per `--no-web` deaktivieren.
 
 ## Nacht- und Aufwachlicht
 
-Es können über die Konfigurationsoptionen im Bereich `[Misc]` sowohl eine Nachtlicht- als auch eine Aufwachlicht-LED konfiguriert werden.
+Es können über die Konfigurationsoptionen im Bereich `[misc]` sowohl eine Nachtlicht- als auch eine Aufwachlicht-LED konfiguriert werden.
 Über die Kurzwahl `enable-night-mode` wird dann das Nachtlicht bis zur konfigurierten Uhrzeit aktiviert.
 
 ## Schlafmusik

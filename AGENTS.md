@@ -1,6 +1,6 @@
 # Project overview
 
-This is a headless python application that runs on a Raspberry Pi Zero 2W inside a historical rotary dial phone.
+This is a headless python 7.13 application that runs on a Raspberry Pi Zero 2W inside a historical rotary dial phone.
 
 # Hardware
 
@@ -29,12 +29,12 @@ This is a headless python application that runs on a Raspberry Pi Zero 2W inside
 - Reboot
 
 Calling and other features are performed/toggled via short codes, entered with the rotary dial.
-A sample feature-complete configuration file is provided in support/config-example.ini.
+A sample feature-complete configuration file is provided in support/config-example.toml.
 
 # Web interface
 
 An optional, dependency-free web server (`lib/webserver.py`) shows the phone status (uptime, connectivity,
 call state) and the state of the features (night light, wake up mode, sleep music, dnd, next wake up time).
-It is configured in the `[Web]` section of the config file (port 0 = disabled) and can also be disabled
+It is configured in the `[web]` section of the TOML config file (port 0 = disabled) and can also be disabled
 with `--no-web`. The same actions as the rotary dial short codes can be triggered via
 `POST /api/action/<name>`, the state is available as JSON under `/api/state`.

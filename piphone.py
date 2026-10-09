@@ -8,7 +8,6 @@ from lib.webserver import WebServer
 
 import argparse
 import asyncio
-from configparser import ConfigParser
 from datetime import datetime, timedelta
 from getpass import getuser
 from pathlib import Path
@@ -18,6 +17,7 @@ from RPi import GPIO
 from signal import signal, SIGTERM, SIGINT
 from os import system
 import socket
+import tomllib
 from sys import exit
 from threading import Timer, Thread
 from time import sleep, time
@@ -29,7 +29,7 @@ argparser = argparse.ArgumentParser(
     description='Steuerung für Raspberry Pi-basiertes Headless-Telefon im Gehäuse alter Telefone (bspw. FeTAp). '
                 'Koordiniert Hörer, Lautsprecher, Gabelkontakt, Nummernschalter und SIP-Client (linphonec).'
 )
-argparser.add_argument('-c', '--config', type=Path, default=Path("/boot/piphone/config.ini"),
+argparser.add_argument('-c', '--config', type=Path, default=Path("/boot/piphone/config.toml"),
                        help='Pfad zur Konfigurationsdatei (Standard: %(default)s)')
 argparser.add_argument('--ignore-dnd', action='store_true', help='Nicht stören für Testzwecke deaktivieren')
 argparser.add_argument('--no-web', action='store_true', help='Webserver zur Steuerung nicht starten')
@@ -40,12 +40,25 @@ if not args.config.exists():
     raise Exception(f"Konfigurationsdatei {args.config} nicht gefunden.")
 
 # Konfiguration lesen
-config = ConfigParser()
-config.read(args.config)
+try:
+    with args.config.open('rb') as config_file:
+        config = tomllib.load(config_file)
+except tomllib.TOMLDecodeError as e:
+    raise Exception(f"Konfigurationsdatei {args.config} ist kein gültiges TOML: {e}")
+
+# Standardwerte für fehlende Abschnitte
+config.setdefault('network', {})
+config.setdefault('sip', {})
+config.setdefault('pins', {})
+config.setdefault('numbers', {})
+config.setdefault('ringtones', {})
+config.setdefault('sounds', {})
+config.setdefault('misc', {})
+config.setdefault('web', {})
 
 if args.ignore_dnd:
-    config.set('SIP', 'dnd_from', "0")
-    config.set('SIP', 'dnd_to', "0")
+    config['sip']['dnd_from'] = 0
+    config['sip']['dnd_to'] = 0
 
 
 class PiPhone:
@@ -94,24 +107,24 @@ class PiPhone:
 
         # Nachtlicht / Aufwachlicht
         self.led = Led(
-            night_light_pin = config['Misc'].getint('night_light_pin', fallback=0),
-            night_light_duty = config['Misc'].getint('night_light_duty', fallback=100),
-            wake_light_pin = config['Misc'].getint('wake_light_pin', fallback=None),
-            wake_light_duty = config['Misc'].getint('wake_light_duty', fallback=0),
+            night_light_pin = config['misc'].get('night_light_pin', 0),
+            night_light_duty = config['misc'].get('night_light_duty', 100),
+            wake_light_pin = config['misc'].get('wake_light_pin', 0),
+            wake_light_duty = config['misc'].get('wake_light_duty', 0),
             verbose = args.verbose
         )
         self.led.wake_light_blink()  # Bootvorgang visualisieren
 
         # Nummernschalter
         self.dial = RotaryDial(
-            pin_nsi = config['Pins'].getint('nsi'),
-            pin_nsa = config['Pins'].getint('nsa'),
+            pin_nsi = config['pins']['nsi'],
+            pin_nsa = config['pins']['nsa'],
             receive_number_callback = self.receive_number
         )
 
         # Gabelkontakt
-        GPIO.setup(config['Pins'].getint('gabel'), GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(config['Pins'].getint('gabel'), GPIO.BOTH, callback = self.watch_hook, bouncetime=100)
+        GPIO.setup(config['pins']['gabel'], GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(config['pins']['gabel'], GPIO.BOTH, callback = self.watch_hook, bouncetime=100)
 
         # Falls beim booten direkt der Hörer abgehoben ist: Besetztton spielen
         if not self.is_hungup():
@@ -124,11 +137,10 @@ class PiPhone:
 
         # Webserver zur Anzeige und Steuerung
         if not args.no_web:
-            web_config = config['Web'] if config.has_section('Web') else {}
-            port = web_config.getint('port', fallback=0)
+            port = config['web'].get('port', 0)
             if port > 0:
-                user = web_config.get('user', fallback='')
-                password = web_config.get('pass', fallback='')
+                user = config['web'].get('user', '')
+                password = config['web'].get('pass', '')
 
                 self.webserver = WebServer(
                     port=port,
@@ -148,7 +160,7 @@ class PiPhone:
 
         # Registrierte Rufnummern loggen
         print("Registrierte Zielrufnummern:")
-        for (number, action) in config['Numbers'].items():
+        for (number, action) in config['numbers'].items():
             print(f" - {number} -> {action}")
 
         print("Bereit.")
@@ -164,9 +176,9 @@ class PiPhone:
 
     def start_linphonec(self) -> None:
         self.linphone = Linphone(
-            hostname=config['SIP']['host'],
-            username=config['SIP']['user'],
-            password=config['SIP']['pass'],
+            hostname=config['sip']['host'],
+            username=config['sip']['user'],
+            password=config['sip']['pass'],
             on_boot=self.linphone_booted,
             on_incoming_call=self.incoming_call,
             on_hang_up=self.hung_up,
@@ -186,7 +198,7 @@ class PiPhone:
             # WLAN prüfen
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.connect((config['Network']['wifi_test_host'], 80))
+                    sock.connect((config['network']['wifi_test_host'], 80))
 
                 # Verbindung ist verfügbar (sonst: TimeoutError/OSError)
 
@@ -218,7 +230,7 @@ class PiPhone:
     @staticmethod
     def is_hungup() -> bool:
         """Prüfe, ob Hörer auf Gabel liegt (aufgelegt ist)"""
-        return GPIO.input(config['Pins'].getint('gabel'))
+        return GPIO.input(config['pins']['gabel'])
 
     def watch_hook(self, _) -> None:
         """Callback/Hook: Gabelkontakt hat ausgelöst"""
@@ -262,23 +274,23 @@ class PiPhone:
 
             if self.is_connected and self.linphone is not None and self.linphone.is_running():
                 # WLAN verbunden und Linphone verfügbar: Freizeichen im Hörer abspielen
-                Audio.play_earpiece(config['Sounds']['waehlen_frei'])
+                Audio.play_earpiece(config['sounds']['waehlen_frei'])
             else:
                 # Telefonie nicht verfügbar: Besetztton im Hörer abspielen
-                Audio.play_earpiece(config['Sounds']['waehlen_nicht_verbunden'])
+                Audio.play_earpiece(config['sounds']['waehlen_nicht_verbunden'])
 
             # Nummernschalter überwachen
             asyncio.run_coroutine_threadsafe(self.dial.start_dialing(), self.loop)
 
             # Maximale Dauer des Wählvorgangs begrenzen
-            self.dialing_timeout = Timer(config['SIP'].getint('dial_timeout', fallback=60), self.cancel_dialing)
+            self.dialing_timeout = Timer(config['sip'].get('dial_timeout', 60), self.cancel_dialing)
             self.dialing_timeout.start()
 
     def cancel_dialing(self) -> None:
         """Timer: Wählvorgang nach einer Minute automatisch abbrechen"""
         print("Wählvorgang nach Timeout automatisch abgebrochen.")
         self.dial.end_dialing()
-        Audio.play_earpiece(config['Sounds']['waehlen_besetzt'], repeat=True)
+        Audio.play_earpiece(config['sounds']['waehlen_besetzt'], repeat=True)
 
     def receive_number(self, number: str) -> None:
         """
@@ -288,7 +300,7 @@ class PiPhone:
 
         #print(f"Gewählte Ziffernfolge: {number}")
         try:
-            action = config['Numbers'][number]
+            action = config['numbers'][number]
         except KeyError:
             # Ziffernfolge nicht hinterlegt
 
@@ -296,7 +308,7 @@ class PiPhone:
             if len(number) > 5:
                 print("Ziffernfolge zu lang, beende Wahlvorgang.")
                 self.dial.end_dialing()
-                Audio.play_earpiece(config['Sounds']['waehlen_ungueltig'])
+                Audio.play_earpiece(config['sounds']['waehlen_ungueltig'])
 
             return
 
@@ -308,7 +320,7 @@ class PiPhone:
         match action:
             case "enable-night-mode":
                 self.start_night_mode()
-                Audio.play_speaker(config['Sounds']['action_confirmed']).wait()
+                Audio.play_speaker(config['sounds']['action_confirmed']).wait()
 
             case "play-sleep-music":
                 self.toggle_sleep_music()
@@ -329,13 +341,13 @@ class PiPhone:
 
             case _:
                 if not self.is_connected or self.linphone is None or not self.linphone.is_running():
-                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+                    Audio.play_earpiece(config['sounds']['waehlen_besetzt'])
                 else:
                     print(f"Rufe Nummer an: {action}")
                     self.linphone.call(action)
 
                     # Starte Timer für maximale Gesprächsdauer ausgehender Anrufe
-                    call_duration = config['SIP'].getint('max_call_duration', fallback=0)
+                    call_duration = config['sip'].get('max_call_duration', 0)
                     if call_duration > 0:
                         self.call_duration_timeout = Timer(call_duration * 60, self._timeout_call)
                         print(f"Maximale Anrufdauer: {call_duration} Minuten")
@@ -356,31 +368,31 @@ class PiPhone:
 
     def test_loudspeaker(self) -> None:
         """Testton über den Lautsprecher abspielen"""
-        Audio.play_speaker(config['Sounds']['test_loud']).wait()
+        Audio.play_speaker(config['sounds']['test_loud']).wait()
 
     def test_earpiece(self) -> None:
         """Testton über den Hörer abspielen"""
         sleep(0.5)
-        Audio.play_earpiece(config['Sounds']['test_earpiece']).wait()
+        Audio.play_earpiece(config['sounds']['test_earpiece']).wait()
 
     def reboot(self) -> None:
         """System neu starten"""
         print("Starte System neu.")
-        Audio.play_speaker(config['Sounds']['reboot']).wait()
+        Audio.play_speaker(config['sounds']['reboot']).wait()
         system("systemctl reboot -i")
 
     def shutdown(self) -> None:
         """System herunterfahren"""
         print("Fahre System herunter.")
-        Audio.play_speaker(config['Sounds']['shutdown']).wait()
+        Audio.play_speaker(config['sounds']['shutdown']).wait()
         system("systemctl poweroff -i")
 
     def is_dnd_active(self) -> bool:
         """Prüfe, ob die Klingelsperre (zeitgesteuert oder manuell) aktiv ist"""
         now = datetime.now()
         return self.manual_dnd or \
-            (0 < now.hour <= config['SIP'].getint("dnd_to", fallback=0)) or \
-            (0 < config['SIP'].getint("dnd_from", fallback=0) <= now.hour)
+            (0 < now.hour <= config['sip'].get('dnd_to', 0)) or \
+            (0 < config['sip'].get('dnd_from', 0) <= now.hour)
 
     def get_state(self) -> dict:
         """Aktuellen Status für die Anzeige im Webserver zusammenstellen"""
@@ -399,19 +411,24 @@ class PiPhone:
 
     def start_sleep_music(self) -> None:
         """Einschlafmusik starten (eigener Thread)"""
-        sleep_music = config['Sounds'].get('sleep_music', fallback=None)
-        if sleep_music is None:
+        sleep_music = config['sounds'].get('sleep_music', [])
+        if not sleep_music:
             print("Kann Einschlafmusik nicht starten: keine Datei angegeben!")
             return
 
         self.manual_dnd = True
 
+        # Nur eine einzelne Datei: einmal abspielen
+        if len(sleep_music) == 1:
+            print("Spiele Einschlafmusik.")
+            Audio.play_speaker(sleep_music[0]).wait()
+
         # Mehrere Dateien: Wähle zufällig aus und spiele mindestens 15min
-        if ',' in sleep_music:
-            sleep_music_list = sleep_music.split(',')
-            shuffle(sleep_music_list)
+        else:
+            tracks = list(sleep_music)
+            shuffle(tracks)
             start = time()
-            for _, next_track in enumerate(sleep_music_list):
+            for _, next_track in enumerate(tracks):
 
                 # Abbruch-Bedingung: Stopp angefordert (z.B. über Webserver oder Nummernschalter)
                 if self.stop_sleep_music:
@@ -434,11 +451,6 @@ class PiPhone:
                     if args.verbose:
                         print("Einschlafmusik durch Hörer gestoppt.")
                     break
-
-        else:
-            # Nur eine einzelne Datei abspielen
-            print("Spiele Einschlafmusik.")
-            Audio.play_speaker(sleep_music).wait()
 
         if args.verbose:
             print("Einschlafmusik beendet.")
@@ -476,7 +488,7 @@ class PiPhone:
 
         # Timer für nächsten Morgen aktivieren
         now = datetime.now()
-        wake_up_times = config['Misc'].get('wake_up_times', fallback='').split(',')
+        wake_up_times = config['misc'].get('wake_up_times', [])
         if len(wake_up_times) != 7:
             print("Kann Nachtmodus nicht aktivieren: Wochentage für wake_up_times unvollständig!")
             return
@@ -521,7 +533,7 @@ class PiPhone:
         """Callback: linphonec gestartet"""
         if self.first_boot:
             self.first_boot = False
-            Audio.play_speaker(config['Sounds']['boot'])
+            Audio.play_speaker(config['sounds']['boot'])
             self.led.wake_light_off()
 
     def incoming_call(self, caller: str) -> None:
@@ -536,7 +548,7 @@ class PiPhone:
             return
 
         # Whitelist ist aktiv
-        if config['SIP'].getboolean("whitelist_active"):
+        if config['sip'].get('whitelist_active', False):
             print("Whitelist aktiv, prüfe Anrufer.")
 
             if caller.startswith('00'):
@@ -556,7 +568,7 @@ class PiPhone:
                 # Unknown => No additional check
                 caller_alt_format = None
 
-            if not caller in config['Numbers'].values() and (caller_alt_format is None or not caller_alt_format in config['Numbers'].values()):
+            if not caller in config['numbers'].values() and (caller_alt_format is None or not caller_alt_format in config['numbers'].values()):
                 print("Anrufer nicht in hinterlegten Nummbern: weise Anruf ab")
                 self.declined_incoming_call = True  # Nötig für hung_up()
                 self.linphone.hangup()
@@ -566,15 +578,15 @@ class PiPhone:
 
         # Klingelton spielen
         try:
-            Audio.play_speaker(config['Ringtones'][caller], repeat=True)
+            Audio.play_speaker(config['ringtones'][caller], repeat=True)
         except KeyError:
-            Audio.play_speaker(config['Sounds']['ring'], repeat=True)
+            Audio.play_speaker(config['sounds']['ring'], repeat=True)
 
     def _timeout_call(self) -> None:
         """Timer: Maximale Gesprächsdauer für ausgehende Gespräche erreicht, beende Gespräch"""
         print("Maximale Telefondauer erreicht. Gespräch wird beendet.")
         self.linphone.hangup()
-        Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+        Audio.play_earpiece(config['sounds']['waehlen_besetzt'])
 
     def hung_up(self) -> None:
         """Callback: Gespräch wurde (durch uns oder Gegenseite) beendet"""
@@ -591,7 +603,7 @@ class PiPhone:
 
         # Falls Hörer abgehoben: Besetztton spielen
         if not self.is_hungup():
-            Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
+            Audio.play_earpiece(config['sounds']['waehlen_besetzt'])
 
 
 async def main() -> None:
@@ -603,7 +615,7 @@ async def main() -> None:
     except (KeyboardInterrupt, SystemExit):
         GPIO.cleanup()
         piphone.linphone.terminate()
-        Audio.play_speaker(config['Sounds']['shutdown']).wait()
+        Audio.play_speaker(config['sounds']['shutdown']).wait()
         print("PiPhone beendet.")
         exit(0)
 
