@@ -8,7 +8,7 @@ host = "10.0.0.1"
 user = "test"
 pass = "test"
 
-# Wie lange darf ein Wählvorgang dauern, bis er automatisch abgebrochen wird
+# Wie lange darf ein Wählvorgang dauern, bis er automatisch abgebrochen wird (Sekunden)
 dial_timeout = 60
 
 # Klingelsperre ab welcher Stunde am Abend (0 = deaktiviert)
@@ -75,19 +75,19 @@ sleep_music = ["/opt/piphone/sounds/sleep-Brahms_Lullaby.mp3"]
 
 # Nachtmodus / Aufwachlicht
 [misc]
-# Nachtlicht, 0 = Deaktiviert
+# GPIO-Pin für Nachtlicht (0 = deaktiviert)
 night_light_pin = 0
 
 # Nachtlicht: Helligkeit in Prozent (100 = PWM deaktiviert, volle Leistung des GPIO)
 night_light_duty = 50
 
-# Aufwach-Licht, 0 = Deaktiviert
+# GPIO-Pin für Aufwach-Licht (0 = deaktiviert)
 wake_light_pin = 0
 
 # Aufwach-Licht: Helligkeit in Prozent (100 = PWM deaktiviert, volle Leistung des GPIO)
 wake_light_duty = 100
 
-# Uhrzeiten zum Aufstehen: Mo, Di, Mi, Do, Fr, Sa, So
+# Uhrzeiten zum Aufstehen: Mo, Di, Mi, Do, Fr, Sa, So (Lokalzeit, ggf. inkl. Sommerzeit).
 wake_up_times = ["06:30", "06:30", "06:30", "06:30", "06:30", "07:30", "07:30"]
 
 # Webserver zur Anzeige und Steuerung des Telefons (im WLAN erreichbar)
