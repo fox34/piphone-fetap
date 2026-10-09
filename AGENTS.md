@@ -21,7 +21,8 @@ This is a headless python application that runs on a Raspberry Pi Zero 2W inside
 - Outgoing call duration limit
 - Incoming number whitelist
 - Do not disturb
-- Night mode (enable night light)
+- Night mode (immediately enables amber LED)
+- Wake up mode (enables green LED in the morning)
 - Sleep music (plays music for a set amount of time)
 - Loudspeaker and earpiece tests
 - Shutdown
@@ -29,3 +30,11 @@ This is a headless python application that runs on a Raspberry Pi Zero 2W inside
 
 Calling and other features are performed/toggled via short codes, entered with the rotary dial.
 A sample feature-complete configuration file is provided in support/config-example.ini.
+
+# Web interface
+
+An optional, dependency-free web server (`lib/webserver.py`) shows the phone status (uptime, connectivity,
+call state) and the state of the features (night light, wake up mode, sleep music, dnd, next wake up time).
+It is configured in the `[Web]` section of the config file (port 0 = disabled) and can also be disabled
+with `--no-web`. The same actions as the rotary dial short codes can be triggered via
+`POST /api/action/<name>`, the state is available as JSON under `/api/state`.

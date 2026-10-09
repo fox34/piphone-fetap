@@ -8,11 +8,13 @@ class Led:
     night_light_pin: int | None = None
     night_light_duty: int
     night_light_pwm: GPIO.PWM | None = None
+    night_light_on_state: bool = False  # Status für Anzeige (z.B. Webserver)
 
     # Aufwachlicht
     wake_light_pin: int | None = None
     wake_light_duty: int
     wake_light_pwm: GPIO.PWM | None = None
+    wake_light_on_state: bool = False  # Status für Anzeige (z.B. Webserver)
 
     def __init__(
             self,
@@ -52,7 +54,6 @@ class Led:
             self.night_light_pwm.stop()
             self.night_light_pwm = None
 
-        print(self.night_light_pin, self.night_light_pwm, self.verbose)
         if self.verbose:
             print(f"Schalte Nachtlicht mit Duty {duty_cycle or self.night_light_duty}% ein.")
 
@@ -61,6 +62,8 @@ class Led:
             self.night_light_pwm.start(duty_cycle or self.night_light_duty)
         else:
             GPIO.output(self.night_light_pin, True)
+
+        self.night_light_on_state = True
 
     def night_light_off(self):
         if self.night_light_pin is None:
@@ -74,6 +77,8 @@ class Led:
             self.night_light_pwm = None
 
         GPIO.output(self.night_light_pin, False)
+
+        self.night_light_on_state = False
 
     def wake_light_on(self, duty_cycle: int | None = None):
         if self.wake_light_pin is None:
@@ -91,6 +96,8 @@ class Led:
             self.wake_light_pwm.start(duty_cycle or self.wake_light_duty)
         else:
             GPIO.output(self.wake_light_pin, True)
+
+        self.wake_light_on_state = True
 
     def wake_light_blink(self):
         """Aufwachlicht Zeitweise als Signallicht einschalten"""
@@ -119,3 +126,5 @@ class Led:
             self.wake_light_pwm = None
 
         GPIO.output(self.wake_light_pin, False)
+
+        self.wake_light_on_state = False

@@ -229,6 +229,31 @@ Optional: Datei `/root/.linphonerc` gemäß Vorlage in `support/` anpassen.
 
 # Bonusfunktionen
 
+## Webserver
+
+Über den Bereich `[Web]` der Konfigurationsdatei kann ein Webserver aktiviert werden, mit dem sich
+der Status des Telefons abrufen und die wichtigsten Funktionen auslösen lassen.
+Ohne Abhängigkeiten, die Seite wird automatisch alle zwei Sekunden aktualisiert.
+
+```
+[Web]
+port = 80           # 0 = deaktiviert
+user =              # optionaler Zugangsschutz (HTTP Basic Auth)
+pass =
+```
+
+Anschließend ist das Telefon im WLAN unter `http://<IP-Adresse-des-Pi>` erreichbar.
+
+Angezeigt werden die Laufzeit, der Verbindungs- und Gesprächsstatus sowie der Zustand von
+Nachtlicht, Aufwachmodus, Einschlafmusik, Klingelsperre und der nächsten Aufstehzeit.
+Per Schaltflächen lassen sich Nachtmodus und Einschlafmusik ein- und ausschalten,
+Lautsprecher und Hörer testen sowie das Telefon neu starten oder herunterfahren.
+
+> **Achtung:** Der Webserver ist unverschlüsselt und erlaubt das Herunterfahren des Telefons.
+> Im WLAN daher möglichst durch eine Zugangskontrolle (Firewall, separates VLAN) schützen.
+
+Alternativ lässt sich der Webserver auch per `--no-web` deaktivieren.
+
 ## Nacht- und Aufwachlicht
 
 Es können über die Konfigurationsoptionen im Bereich `[Misc]` sowohl eine Nachtlicht- als auch eine Aufwachlicht-LED konfiguriert werden.

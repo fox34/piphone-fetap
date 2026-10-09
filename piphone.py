@@ -4,6 +4,7 @@ from lib.audio import Audio
 from lib.led import Led
 from lib.linphone import Linphone
 from lib.rotarydial import RotaryDial
+from lib.webserver import WebServer
 
 import argparse
 import asyncio
@@ -31,6 +32,7 @@ argparser = argparse.ArgumentParser(
 argparser.add_argument('-c', '--config', type=Path, default=Path("/boot/piphone/config.ini"),
                        help='Pfad zur Konfigurationsdatei (Standard: %(default)s)')
 argparser.add_argument('--ignore-dnd', action='store_true', help='Nicht stören für Testzwecke deaktivieren')
+argparser.add_argument('--no-web', action='store_true', help='Webserver zur Steuerung nicht starten')
 argparser.add_argument('-v', '--verbose', action='store_true', help='Ausführliches Logging aktivieren')
 args = argparser.parse_args()
 
@@ -53,6 +55,7 @@ class PiPhone:
     dial: RotaryDial
     linphone: Linphone | None = None
     led: Led | None = None
+    webserver: WebServer | None = None
 
     # Tasks, Timer und Prozesse
     wifi_test_task: asyncio.Task  # Periodisch WLAN-Verbindung prüfen
@@ -68,13 +71,19 @@ class PiPhone:
     declined_incoming_call: bool = False
     terminate_requested: bool = False
     manual_dnd: bool = False
-    
+    stop_sleep_music: bool = False  # Einschlafmusik soll gestoppt werden
+    next_wake_up: datetime | None = None  # Nächste konfigurierte Aufstehzeit (bei aktivem Nachtmodus)
+    started_at: float = 0  # Startzeitpunkt für die Laufzeitanzeige
+
     def __init__(self, loop: asyncio.AbstractEventLoop):
         """Haupt-Programm starten"""
         print(f"Starte PiPhone als {getuser()}...")
 
         # Event-Loop speichern
         self.loop = loop
+
+        # Startzeitpunkt für die Laufzeitanzeige merken
+        self.started_at = time()
 
         # Systemsignale
         signal(SIGTERM, self.handle_sigterm)
@@ -112,6 +121,30 @@ class PiPhone:
 
         # WLAN-Verbindung und linphonec überwachen
         asyncio.create_task(self.watchdog())
+
+        # Webserver zur Anzeige und Steuerung
+        if not args.no_web:
+            web_config = config['Web'] if config.has_section('Web') else {}
+            port = web_config.getint('port', fallback=0)
+            if port > 0:
+                user = web_config.get('user', fallback='')
+                password = web_config.get('pass', fallback='')
+
+                self.webserver = WebServer(
+                    port=port,
+                    get_state=self.get_state,
+                    actions={
+                        'night-mode': self.start_night_mode,
+                        'sleep-music': self.toggle_sleep_music,
+                        'test-loudspeaker': self.test_loudspeaker,
+                        'test-earpiece': self.test_earpiece,
+                        'reboot': self.reboot,
+                        'shutdown': self.shutdown,
+                    },
+                    credentials=f"{user}:{password}" if user and password else None,
+                    verbose=args.verbose
+                )
+                asyncio.create_task(self.webserver.start())
 
         # Registrierte Rufnummern loggen
         print("Registrierte Zielrufnummern:")
@@ -278,29 +311,20 @@ class PiPhone:
                 Audio.play_speaker(config['Sounds']['action_confirmed']).wait()
 
             case "play-sleep-music":
-                # Dieser Fall sollte eigentlich nicht eintreten, da mit Abheben des Hörers die Wiedergabe stoppt
-                if self.sleep_music_thread is not None:
-                    print("Schlafmusik läuft bereits.")
-                    return
-
-                self.sleep_music_thread = Thread(target=self.start_sleep_music)
-                self.sleep_music_thread.start()
+                self.toggle_sleep_music()
 
             case "test-loudspeaker":
-                Audio.play_speaker(config['Sounds']['test_loud']).wait()
+                self.test_loudspeaker()
 
             case "test-earpiece":
-                sleep(0.5)
-                Audio.play_earpiece(config['Sounds']['test_earpiece']).wait()
+                self.test_earpiece()
 
             case "reboot":
-                Audio.play_speaker(config['Sounds']['reboot']).wait()
-                system("systemctl reboot -i")
+                self.reboot()
                 raise SystemExit()
 
             case "shutdown":
-                Audio.play_speaker(config['Sounds']['shutdown']).wait()
-                system("systemctl poweroff -i")
+                self.shutdown()
                 raise SystemExit()
 
             case _:
@@ -317,6 +341,62 @@ class PiPhone:
                         print(f"Maximale Anrufdauer: {call_duration} Minuten")
                         self.call_duration_timeout.start()
 
+    def toggle_sleep_music(self) -> None:
+        """Einschlafmusik starten bzw. bei laufender Wiedergabe stoppen"""
+        
+        if self.sleep_music_thread is not None:
+            print("Stoppe Einschlafmusik.")
+            self.stop_sleep_music = True
+            Audio.stop_speaker()
+            return
+
+        self.stop_sleep_music = False
+        self.sleep_music_thread = Thread(target=self.start_sleep_music)
+        self.sleep_music_thread.start()
+
+    def test_loudspeaker(self) -> None:
+        """Testton über den Lautsprecher abspielen"""
+        Audio.play_speaker(config['Sounds']['test_loud']).wait()
+
+    def test_earpiece(self) -> None:
+        """Testton über den Hörer abspielen"""
+        sleep(0.5)
+        Audio.play_earpiece(config['Sounds']['test_earpiece']).wait()
+
+    def reboot(self) -> None:
+        """System neu starten"""
+        print("Starte System neu.")
+        Audio.play_speaker(config['Sounds']['reboot']).wait()
+        system("systemctl reboot -i")
+
+    def shutdown(self) -> None:
+        """System herunterfahren"""
+        print("Fahre System herunter.")
+        Audio.play_speaker(config['Sounds']['shutdown']).wait()
+        system("systemctl poweroff -i")
+
+    def is_dnd_active(self) -> bool:
+        """Prüfe, ob die Klingelsperre (zeitgesteuert oder manuell) aktiv ist"""
+        now = datetime.now()
+        return self.manual_dnd or \
+            (0 < now.hour <= config['SIP'].getint("dnd_to", fallback=0)) or \
+            (0 < config['SIP'].getint("dnd_from", fallback=0) <= now.hour)
+
+    def get_state(self) -> dict:
+        """Aktuellen Status für die Anzeige im Webserver zusammenstellen"""
+        return {
+            'uptime': int(time() - self.started_at),
+            'connected': self.is_connected,
+            'sip_registered': self.linphone is not None and self.linphone.is_running(),
+            'call_active': self.linphone is not None and self.linphone.call_active,
+            'hungup': bool(self.is_hungup()),
+            'night_light': self.led.night_light_on_state,
+            'wake_up_mode': self.led.wake_light_on_state,
+            'sleep_music': self.sleep_music_thread is not None,
+            'dnd': self.is_dnd_active(),
+            'next_wake_up': self.next_wake_up.isoformat(timespec='minutes') if self.next_wake_up else None,
+        }
+
     def start_sleep_music(self) -> None:
         """Einschlafmusik starten (eigener Thread)"""
         sleep_music = config['Sounds'].get('sleep_music', fallback=None)
@@ -332,6 +412,13 @@ class PiPhone:
             shuffle(sleep_music_list)
             start = time()
             for _, next_track in enumerate(sleep_music_list):
+
+                # Abbruch-Bedingung: Stopp angefordert (z.B. über Webserver oder Nummernschalter)
+                if self.stop_sleep_music:
+                    if args.verbose:
+                        print("Einschlafmusik auf Anforderung gestoppt.")
+                    break
+
                 # Spiele Schlaflied (Prozess wird gestoppt, falls anderer Sound gespielt wird, bspw. durch Abheben des Hörers)
                 print(f"Spiele Einschlafmusik: {next_track}")
                 Audio.play_speaker(next_track).wait()
@@ -360,6 +447,7 @@ class PiPhone:
         if self.night_light_timer is None:
             self.manual_dnd = False
 
+        self.stop_sleep_music = False
         self.sleep_music_thread = None
 
     def start_night_mode(self) -> None:
@@ -379,6 +467,7 @@ class PiPhone:
             self.night_light_timer = None
             self.led.night_light_off()
             self.manual_dnd = False
+            self.next_wake_up = None
             return
 
         # Nachtlicht einschalten
@@ -407,6 +496,7 @@ class PiPhone:
             )
 
         print(f"Aktiviere Nachtlicht bis {wake_up_time}.")
+        self.next_wake_up = wake_up_time
         self.night_light_timer = Timer((wake_up_time - now).seconds, self.start_wakeup_light)
         self.night_light_timer.start()
 
@@ -425,6 +515,7 @@ class PiPhone:
         self.led.wake_light_off()
         self.night_light_timer = None
         self.manual_dnd = False
+        self.next_wake_up = None
 
     def linphone_booted(self) -> None:
         """Callback: linphonec gestartet"""
@@ -438,13 +529,7 @@ class PiPhone:
         print(f"Eingehender Anruf von {caller}")
 
         # Anruf in bestimmten Situationen abweisen
-        now = datetime.now()
-        if (
-            not self.is_hungup() or                                # Hörer ist abgehoben
-            (0 < now.hour <= config['SIP'].getint("dnd_to")) or    # Nicht stören: Morgens
-            (0 < config['SIP'].getint("dnd_from") <= now.hour) or  # Nicht stören: Abends
-            self.manual_dnd                                        # Nicht stören: Manuell (Nachtmodus)
-        ):
+        if not self.is_hungup() or self.is_dnd_active():  # Hörer abgehoben oder Klingelsperre aktiv
             print("Hörer ist abgehoben oder Klingelsperre ist aktiv: weise Anruf ab")
             self.declined_incoming_call = True  # Nötig für hung_up()
             self.linphone.hangup()
