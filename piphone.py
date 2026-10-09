@@ -11,13 +11,15 @@ from configparser import ConfigParser
 from datetime import datetime, timedelta
 from getpass import getuser
 from pathlib import Path
+from random import shuffle
+# noinspection PyUnresolvedReferences
 from RPi import GPIO
 from signal import signal, SIGTERM, SIGINT
 from os import system
 import socket
 from sys import exit
 from threading import Timer, Thread
-from time import sleep
+from time import sleep, time
 
 
 # CLI-Argumente lesen
@@ -274,10 +276,6 @@ class PiPhone:
             case "enable-night-mode":
                 self.start_night_mode()
                 Audio.play_speaker(config['Sounds']['action_confirmed']).wait()
-                sleep(1)
-                if not self.is_hungup():
-                    # Hörer noch nicht aufgelegt
-                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
             case "play-sleep-music":
                 # Dieser Fall sollte eigentlich nicht eintreten, da mit Abheben des Hörers die Wiedergabe stoppt
@@ -290,18 +288,10 @@ class PiPhone:
 
             case "test-loudspeaker":
                 Audio.play_speaker(config['Sounds']['test_loud']).wait()
-                sleep(1)
-                if not self.is_hungup():
-                    # Hörer noch nicht aufgelegt
-                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
             case "test-earpiece":
                 sleep(0.5)
                 Audio.play_earpiece(config['Sounds']['test_earpiece']).wait()
-                sleep(1)
-                if not self.is_hungup():
-                    # Hörer noch nicht aufgelegt
-                    Audio.play_earpiece(config['Sounds']['waehlen_besetzt'])
 
             case "reboot":
                 Audio.play_speaker(config['Sounds']['reboot']).wait()
@@ -334,12 +324,37 @@ class PiPhone:
             print("Kann Einschlafmusik nicht starten: keine Datei angegeben!")
             return
 
-        print("Spiele Einschlafmusik.")
         self.manual_dnd = True
-        Audio.play_speaker(sleep_music).wait()
+
+        # Mehrere Dateien: Wähle zufällig aus und spiele mindestens 15min
+        if ',' in sleep_music:
+            sleep_music_list = sleep_music.split(',')
+            shuffle(sleep_music_list)
+            start = time()
+            for _, next_track in enumerate(sleep_music_list):
+                # Spiele Schlaflied (Prozess wird gestoppt, falls anderer Sound gespielt wird, bspw. durch Abheben des Hörers)
+                print(f"Spiele Einschlafmusik: {next_track}")
+                Audio.play_speaker(next_track).wait()
+
+                # Abbruch-Bedingung: Nach 15 Minuten kein weiteres Lied starten
+                if time() - start >= 15 * 60:
+                    if args.verbose:
+                        print("Einschlafmusik nach 15+ Minuten gestoppt.")
+                    break
+
+                # Abbruch-Bedingung: Hörer abgehoben
+                if not self.is_hungup():
+                    if args.verbose:
+                        print("Einschlafmusik durch Hörer gestoppt.")
+                    break
+
+        else:
+            # Nur eine einzelne Datei abspielen
+            print("Spiele Einschlafmusik.")
+            Audio.play_speaker(sleep_music).wait()
 
         if args.verbose:
-            print("Einschlafmusik abgespielt.")
+            print("Einschlafmusik beendet.")
 
         # DND abschalten, falls Nachtlicht nicht aktiv ist
         if self.night_light_timer is None:
